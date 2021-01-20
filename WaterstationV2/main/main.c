@@ -11,12 +11,18 @@
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "sdkconfig.h"
+#include "esp_log.h"
 
 #include "PLC.h"
 #include "variablepool.h"
 
 void app_main(void)
 {
+
+
+    //Set Log levels
+    esp_log_level_set("calculateWaterContent", ESP_LOG_WARN);
+
 
     initializeVariablePool();
     initializePLCTask();

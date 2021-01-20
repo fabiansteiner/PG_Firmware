@@ -6,6 +6,11 @@
 #idf_component_register(SRCS ${app_sources})
 
 
-idf_component_register(SRCS "main.c" "PLC.c" "UserIO.c" "variablepool.c" "web_server.c"
+idf_component_register(SRCS "main.c"
+                        "PLC.c"
+                        "UserIO.c"
+                        "variablepool.c"
+                        "web_server.c"
+                        "calculateVolumetricContent.c"
                     INCLUDE_DIRS ".")
 
