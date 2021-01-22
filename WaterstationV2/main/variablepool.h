@@ -1,7 +1,10 @@
 
 #include <stdio.h>
 
+
 #define PLANTSIZE 100
+#define UNREGISTEREDADDRESS 255
+#define NONEXISTINGADDRESS 254
 
 #define CHANGE_NAME 1
 #define CHANGE_WATERAMOUNT 2
@@ -20,6 +23,17 @@
 #define STATUS_IN_QUEUE 3
 #define STATUS_WATERING 4
 
+#define OPEN 20
+#define CLOSED 40
+#define OPENING 60
+#define CLOSING 80
+#define UNKNOWN 100
+#define CURRSENSEERROR 120
+#define MANUALOPEN 140
+#define OPENINGMANUALLY 160
+#define CLOSINGMANUALLY 180
+#define LOCKED 200
+
 typedef struct wateringProgress{
     int water;
     int waterProgress;
@@ -34,10 +48,12 @@ typedef struct plantData{
     uint8_t fertilizerAmount;
     int soilMoisture;
     uint8_t threshold;
-    uint8_t status;
+    uint8_t wateringStatus;
+    uint8_t valveStatus;
     uint8_t autoWatering;
     wateringProgress progress;
 }plant;
+
 
 typedef struct plantDataChange{
     plant plantToChange;

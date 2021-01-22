@@ -12,5 +12,7 @@ idf_component_register(SRCS "main.c"
                         "variablepool.c"
                         "web_server.c"
                         "calculateVolumetricContent.c"
+                        "watering.c"
+                        "FAT_storage.c"
                     INCLUDE_DIRS ".")
 

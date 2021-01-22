@@ -12,7 +12,7 @@ uint8_t getWaterContent(uint8_t highByte, uint8_t lowByte){
     ESP_LOGI(TAG, "HighByte: %u , LowByte: %u\n\r", highByte, lowByte);
     ESP_LOGI(TAG, "Turned ADC value: %i\n", adc_value);
 
-    if(adc_value < ADC_P1){
+    if(adc_value < ADC_P1 || adc_value == 1023){
         return 0;
     }else if (adc_value >= ADC_P1 && adc_value < ADC_P2){
         return linearInterpolation(adc_value, INTER_K_P1_P2, INTER_D_P1_P2, INTER_X1_P1_P2);

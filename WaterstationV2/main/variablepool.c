@@ -1,10 +1,12 @@
-#include "variablepool.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "string.h"
 #include "esp_log.h"
+
+#include "variablepool.h"
+#include "FAT_storage.h"
+
 
 static const char *TAG = "VARIABLEPOOL_TASK";
 
@@ -42,12 +44,25 @@ void variablePoolTask(void * pvParameters){
  * Start RTOS Task
  */
 void initializeVariablePool(){
-    //Read data from EEPROM
+    
+    //Initialize PlantList
+    char plantName[10];
+    
+    for(uint8_t i=0; i< PLANTSIZE; i++){
+        sprintf(plantName, "plant%u", i);
+        plant initPlant = {UNREGISTEREDADDRESS, "dude", 300, 0, 0, 50, STATUS_OK, UNKNOWN, 0, {0}};
+        plantList[i] = initPlant;
+    }
+
+    //TODO: Read data from EEPROM
+
+    initFATStorage();
+
     //Dummy Data 
-    plant dummyPlant1 = {0b01010110, "Plant1", 1000, 5, 70.0f, 50, 1, 0, {0}};
+    plant dummyPlant1 = {0b01010110, "Plant86", 300, 0, 0, 50, STATUS_OK, UNKNOWN ,0, {0}};
     //plant dummyPlant2 = {0b11001100, "Plant2", 1000, 5, 70.0f, 50, 1, 0};
 
-    plantList[0] = dummyPlant1;
+    plantList[86] = dummyPlant1;
     //plantList[1] = dummyPlant2;
     
     plantChangeQueue = xQueueCreate(32, sizeof(plantChange));
@@ -75,7 +90,7 @@ void initializeVariablePool(){
 void changePlant(plant plantToChange, uint8_t parameterType){
     plantChange pc = {plantToChange, parameterType};
     xQueueSend(plantChangeQueue, &pc, (TickType_t) 20);
-    ESP_LOGI(TAG, "Sent Plant Change Request to Queue\n");
+    //ESP_LOGI(TAG, "Sent Plant Change Request to Queue\n");
 }
 
 /**
@@ -98,25 +113,26 @@ int getPlantIndex(uint8_t plantAddress){
 }
 
 void changePlantInternally(plantChange changePlant){
-    ESP_LOGI(TAG, "Entered changePlantInternally...\n");
-    int i = 0;
+    //ESP_LOGI(TAG, "Entered changePlantInternally...\n");
     int index = 0;
     switch (changePlant.parameterType)
     {
     case CHANGE_ADD:
-       
-        while(plantList[i].address != 0){
-            i++;
-        }
-        plantList[i] = changePlant.plantToChange;
+        ESP_LOGI(TAG, "Adding new Plant");
+        plantList[changePlant.plantToChange.address].address = changePlant.plantToChange.address;
+        break;
+    case CHANGE_REMOVE:
+        ESP_LOGI(TAG, "Removing Plant");
+        plantList[changePlant.plantToChange.address].address = UNREGISTEREDADDRESS;
         break;
     case CHANGE_PLCVALVEVALUES:
         index = getPlantIndex(changePlant.plantToChange.address);
         if(index!=255){
-            ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i\n", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
+            //ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
             plantList[index].progress = changePlant.plantToChange.progress;
             plantList[index].soilMoisture = changePlant.plantToChange.soilMoisture;
-            plantList[index].status = changePlant.plantToChange.status;
+            plantList[index].wateringStatus = changePlant.plantToChange.wateringStatus;
+            plantList[index].valveStatus = changePlant.plantToChange.valveStatus;
         }
         
         break;
