@@ -25,6 +25,6 @@ void app_main(void)
 
 
     initializeVariablePool();
-    //initializePLCTask();
+    initializePLCTask();
     vTaskDelete(NULL);
 }

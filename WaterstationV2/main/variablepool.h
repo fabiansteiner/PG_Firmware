@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 
 
@@ -62,22 +61,25 @@ typedef struct plantDataChange{
 
 
 /**
- * Initializes the main Variables, reads Data from "EEPROM", if it exists
+ * Initializes the main Variables, reads Data from FAT Partition, if it exists
  * Start RTOS Task
  */
 void initializeVariablePool();
 
 /**
- * Adds change request for plants to the RTOS Queue
+ * Adds change request for plants to the RTOS Queue: plantChangeQueue
  * Adding and Removing is also happening here
  * This should be used as the ONLY interface to make changes to the plantList
- * Due to the Queue, this will prevent concurrent writing of changes to the List
+ * The plantChangeQueue prevents concurrent writing of changes to the List
+ * @param plantToChange - copy of the plant, which should be changed
+ * @param parameterType - defines, what exactly should be changed: CHANGE_* Constants are used here
  */
 void changePlant(plant plantToChange, uint8_t parameterType);
 
 
 /**
- * Get pointer to the Plant List
+ * Get the whole plant list
+ * @return Pointer to plant list
  */
 plant * getVariablePool();
 

@@ -40,7 +40,7 @@ void variablePoolTask(void * pvParameters){
 }
 
 /**
- * Initializes the main Variables, reads Data from "EEPROM", if it exists
+ * Initializes the main Variables, reads Data from FAT Partition, if it exists
  * Start RTOS Task
  */
 void initializeVariablePool(){
@@ -54,48 +54,30 @@ void initializeVariablePool(){
         plantList[i] = initPlant;
     }
 
-    //TODO: Read data from EEPROM
-
-    initFATStorage();
 
     //Dummy Data 
-    plant dummyPlant1 = {0b01010110, "Plant86", 300, 0, 0, 50, STATUS_OK, UNKNOWN ,0, {0}};
+    //plant dummyPlant1 = {0b01010110, "Plant86", 300, 0, 0, 50, STATUS_OK, UNKNOWN ,0, {0}};
     //plant dummyPlant2 = {0b11001100, "Plant2", 1000, 5, 70.0f, 50, 1, 0};
 
-    plantList[86] = dummyPlant1;
+    //plantList[86] = dummyPlant1;
     //plantList[1] = dummyPlant2;
     
     plantChangeQueue = xQueueCreate(32, sizeof(plantChange));
     xTaskCreate(variablePoolTask, "variable_pool_task", VARIABLE_POOL_TASK_STACK_SIZE, NULL, VARIABLE_POOL_TASK_PRIORITY, variablePoolHandle);
 
-    /*
-
-    plantChange pc1 = {dummyPlant1, CHANGE_ADD};
-    plantChange pc2 = {dummyPlant2, CHANGE_ADD};
-
-    changePlant(pc1);
-    changePlant(pc2);
-    */
-
-   
+    //Init Fat Storage an read all stored Plants into ram
+    initFATStorage();
 
 }
 
-/**
- * Adds change request for plants to the RTOS Queue
- * Adding and Removing is also happening here
- * This should be used as the ONLY interface to make changes to the plantList
- * Due to the Queue, this will prevent concurrent writing of changes to the List
- */
+
 void changePlant(plant plantToChange, uint8_t parameterType){
     plantChange pc = {plantToChange, parameterType};
     xQueueSend(plantChangeQueue, &pc, (TickType_t) 20);
     //ESP_LOGI(TAG, "Sent Plant Change Request to Queue\n");
 }
 
-/**
- * Get the whole pointer to the variable Pool
- */
+
 plant * getVariablePool(){
     return plantList;
 }
@@ -120,11 +102,15 @@ void changePlantInternally(plantChange changePlant){
     case CHANGE_ADD:
         ESP_LOGI(TAG, "Adding new Plant");
         plantList[changePlant.plantToChange.address].address = changePlant.plantToChange.address;
+        savePlantToStorage(changePlant.plantToChange);
         break;
+
     case CHANGE_REMOVE:
         ESP_LOGI(TAG, "Removing Plant");
+        removePlantFromStorage(changePlant.plantToChange);
         plantList[changePlant.plantToChange.address].address = UNREGISTEREDADDRESS;
         break;
+
     case CHANGE_PLCVALVEVALUES:
         index = getPlantIndex(changePlant.plantToChange.address);
         if(index!=255){
@@ -134,8 +120,8 @@ void changePlantInternally(plantChange changePlant){
             plantList[index].wateringStatus = changePlant.plantToChange.wateringStatus;
             plantList[index].valveStatus = changePlant.plantToChange.valveStatus;
         }
-        
         break;
+
     case CHANGE_SETTINGS:
         index = getPlantIndex(changePlant.plantToChange.address);
         if(index!=255){
@@ -145,9 +131,6 @@ void changePlantInternally(plantChange changePlant){
             strcpy(plantList[index].name, changePlant.plantToChange.name);
             plantList[index].threshold= changePlant.plantToChange.threshold;
         }
-        break;
-    
-    default:
         break;
     }
 }

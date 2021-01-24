@@ -22,6 +22,9 @@ const char *base_path = "/spiflash";
 
 FILE *f;
 
+void deleteAllFiles();
+plant getPlantFromStorage(uint8_t index, char * name, bool useIndex);
+
 void initFATStorage(){
     ESP_LOGI(TAG, "Mounting FAT filesystem");
     // To mount device we need name of device partition, define base_path
@@ -36,22 +39,19 @@ void initFATStorage(){
         ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
         return;
     }
-    plant initPlant = {66, "dude", 300, 0, 0, 50, STATUS_OK, UNKNOWN, 0, {0}};
-    plant initPlant1 = {55, "yoyo", 400, 5, 0, 40, STATUS_OK, UNKNOWN, 0, {0}};
-    //savePlantToStorage(initPlant);
-    //savePlantToStorage(initPlant1);
 
-    //getPlantFromStorage(66);
-    //getPlantFromStorage(55);
-    //getPlantFromStorage(77);
+    //deleteAllFiles();
 
+    //Read all existing Files from FAT Storage - 1 File = 1 Plant
     FF_DIR dir;
     FILINFO fileInformation;
     f_opendir(&dir, "/");
     f_readdir(&dir, &fileInformation);
-    while(fileInformation.fsize!=0){
+    while(strcmp(fileInformation.fname, "")!=0){
         ESP_LOGI(TAG, "Filename: %s, fileSize: %u, ", fileInformation.fname, fileInformation.fsize);
-        getPlantFromStorage(0, fileInformation.fname ,false);
+        plant storedPlant = getPlantFromStorage(0, fileInformation.fname ,false);
+        if(storedPlant.address != NONEXISTINGADDRESS)
+            changePlant(storedPlant, CHANGE_ADD);
         fileInformation.fsize = 0;
         f_readdir(&dir, &fileInformation);
     }
@@ -65,6 +65,7 @@ plant getPlantFromStorage(uint8_t index, char * name, bool useIndex){
     }
     // Open file for reading
     plant p = {0};
+    p.address = NONEXISTINGADDRESS;
     ESP_LOGI(TAG, "Reading file");
     f = fopen(filename, "rb");
 
@@ -75,12 +76,32 @@ plant getPlantFromStorage(uint8_t index, char * name, bool useIndex){
     char line[128];
     fgets(line, sizeof(line), f);
     fclose(f);
-    // strip newline
-    char *pos = strchr(line, '\n');
-    if (pos) {
-        *pos = '\0';
-    }
+
     ESP_LOGI(TAG, "Read from file: '%s'", line);
+
+    //Extract Information from file and safe it into the plant struct
+    int counter = 0;
+    char * token = strtok(line, ",");
+    while( token != NULL ) {
+        ESP_LOGI(TAG, "%s", token);
+        switch (counter)
+        {
+        case 0: p.address = atoi(token);
+            break;
+        case 1: strcpy(p.name, token);
+            break;
+        case 2: p.waterAmount = atoi(token);
+            break;
+        case 3: p.fertilizerAmount = atoi(token);
+            break;
+        case 4: p.threshold = atoi(token);
+            break;
+        case 5: p.autoWatering = atoi(token);
+            break;
+        }
+        token = strtok(NULL, ",");
+        counter++;
+    }
 
     return p;
 }
@@ -101,4 +122,31 @@ void savePlantToStorage(plant plantToSave){
     fclose(f);
     ESP_LOGI(TAG, "File written");
 
+}
+
+void removePlantFromStorage(plant plantToRemove){
+    sprintf(filename, "%u.txt", plantToRemove.address);
+    int result = f_unlink(filename);
+    
+    if(result == FR_OK){
+        ESP_LOGI(TAG, "Plant %u deleted", plantToRemove.address);
+    }else{
+        ESP_LOGI(TAG, "Could not delete plant, FAT ERROR CODE: %i", plantToRemove.address);
+    }
+    
+}
+
+void deleteAllFiles(){
+
+    FF_DIR dir;
+    FILINFO fileInformation;
+    f_opendir(&dir, "/");
+    f_readdir(&dir, &fileInformation);
+    while(strcmp(fileInformation.fname, "")!=0){
+        ESP_LOGI(TAG, "Filename: %s, fileSize: %u, ", fileInformation.fname, fileInformation.fsize);
+        f_unlink(fileInformation.fname);
+        fileInformation.fsize = 0;
+        f_readdir(&dir, &fileInformation);
+    }
+    f_closedir(&dir);
 }
