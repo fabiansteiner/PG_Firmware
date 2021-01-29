@@ -9,6 +9,10 @@
 
 #include <stdio.h>
 
+#ifndef FATSTORAGE_H
+#define FATSTORAGE_H
+
+
 /**
 *   Mount fat partition
 *   Get all saved plants and load the into ram
@@ -22,9 +26,12 @@ void initFATStorage();
 */
 void savePlantToStorage(plant plantToSave);
 
+plant getPlantFromStorage(uint8_t index, char * name, bool useIndex);
+
 /**
 *   remove plant from FAT partition
 *   @param plantToRemove - copy of plant object, that should be removed
 */
 void removePlantFromStorage(plant plantToRemove);
 
+#endif

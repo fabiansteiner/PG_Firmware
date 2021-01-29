@@ -1,4 +1,8 @@
 #include <stdio.h>
+#include <stdbool.h>
+
+#ifndef VARIABLEPOOL_H
+#define VARIABLEPOOL_H
 
 
 #define PLANTSIZE 100
@@ -16,9 +20,14 @@
 #define CHANGE_ADD 9
 #define CHANGE_PLCVALVEVALUES 10
 #define CHANGE_SETTINGS 11
+#define CHANGE_WATERINGSTATUS 12
+#define CHANGE_SETSAFETYTIME 13
+#define UPDATE_SAFETYMINUTES 14
 
-#define STATUS_MOTORERROR 1
-#define STATUS_OK 2
+#define ERRCHANGE_OVERPRESSURE 1
+#define ERRCHANGE_NOTENOUGHWATERFLOW 2
+
+#define STATUS_NOTHINSCHEDULED 2
 #define STATUS_IN_QUEUE 3
 #define STATUS_WATERING 4
 
@@ -32,6 +41,20 @@
 #define OPENINGMANUALLY 160
 #define CLOSINGMANUALLY 180
 #define LOCKED 200
+#define OFFLINE 220
+
+#define UNKNOWNSOILMOISTURE 80
+
+//In minutes
+#define CLASSICSAFETYWAIT 180
+
+typedef struct errorStates{
+    bool waterPressureHigh;
+    bool notEnoughWaterFlow;
+    bool oneOrMoreValvesNotClosed;
+    bool oneOrMoreValveErrors;
+    bool oneOrMoreValvesOffline;
+}errorStates;
 
 typedef struct wateringProgress{
     int water;
@@ -51,6 +74,9 @@ typedef struct plantData{
     uint8_t valveStatus;
     uint8_t autoWatering;
     wateringProgress progress;
+    uint8_t unsuccessfulRequests;
+    uint8_t safetyTimeActive;
+    uint16_t safetyMinutesLeft;
 }plant;
 
 
@@ -58,6 +84,13 @@ typedef struct plantDataChange{
     plant plantToChange;
     uint8_t parameterType;
 }plantChange;
+
+
+
+typedef struct errorChange{
+    uint8_t errType;
+    bool newState;
+}errorChange;
 
 
 /**
@@ -76,6 +109,8 @@ void initializeVariablePool();
  */
 void changePlant(plant plantToChange, uint8_t parameterType);
 
+void changeErrorState(uint8_t errType, bool newState);
+
 
 /**
  * Get the whole plant list
@@ -84,4 +119,20 @@ void changePlant(plant plantToChange, uint8_t parameterType);
 plant * getVariablePool();
 
 
+/**
+ * Gets new plant with standard init values
+ * @return copy of new plant object
+ */
+plant getNewPlant();
 
+
+/**
+ * Adds Error message
+ * @param plantAddress - Address of plant
+ * @param errorType - Error Type, to know how the error message will look like
+ */
+void addErrorMessage(uint8_t plantAddress, uint8_t errorType);
+
+
+
+#endif

@@ -12,9 +12,12 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
+#include "string.h"
 
 #include "PLC.h"
-#include "variablepool.h"
+#include "watering.h"
+#include "FAT_storage.h"
+#include "web_server.h"
 
 void app_main(void)
 {
@@ -22,9 +25,51 @@ void app_main(void)
 
     //Set Log levels
     esp_log_level_set("calculateWaterContent", ESP_LOG_WARN);
+    //esp_log_level_set("FAT_Storage", ESP_LOG_WARN);
 
+    //Normal Operation:
 
     initializeVariablePool();
     initializePLCTask();
+    initWebSocketServer();
+
+    //Test Code for Watering
+    /*
+    initializeWateringComponents(true);
+    plant p = getNewPlant();
+    wateringJob wj;
+    wj.plantToWater = p;
+    wj.waterAmount = 2000;
+    wj.fertilizerAmount = 10;
+    startWateringTask(wj);
+    */
+
+    //Test Code for fat partition
+    /*
+    initFATStorage();
+
+    plant p = getNewPlant();
+    p.address = 123;
+    strcpy(p.name, "HelloMyFreshBubu");
+    savePlantToStorage(p);
+    getPlantFromStorage(123, "", true);
+
+    strcpy(p.name, "lul");
+    savePlantToStorage(p);
+    getPlantFromStorage(123, "", true);
+
+    removePlantFromStorage(p);
+
+    while(1){
+        vTaskDelay(10/portTICK_PERIOD_MS);
+    }
+    */
+    
+
+
+
+    
+
+    
     vTaskDelete(NULL);
 }

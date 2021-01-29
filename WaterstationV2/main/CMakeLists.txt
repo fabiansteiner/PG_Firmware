@@ -14,5 +14,7 @@ idf_component_register(SRCS "main.c"
                         "calculateVolumetricContent.c"
                         "watering.c"
                         "FAT_storage.c"
+                        "countDown.c"
+                        "wifi.c"
                     INCLUDE_DIRS ".")
 

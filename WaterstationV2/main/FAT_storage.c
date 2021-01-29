@@ -40,6 +40,8 @@ void initFATStorage(){
         return;
     }
 
+
+
     //deleteAllFiles();
 
     //Read all existing Files from FAT Storage - 1 File = 1 Plant
@@ -118,6 +120,7 @@ void savePlantToStorage(plant plantToSave){
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
+    //Override file completely
     fprintf(f, "%u,%s,%i,%u,%u,%u", plantToSave.address, plantToSave.name, plantToSave.waterAmount, plantToSave.fertilizerAmount, plantToSave.threshold, plantToSave.autoWatering);
     fclose(f);
     ESP_LOGI(TAG, "File written");

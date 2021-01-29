@@ -1,5 +1,9 @@
 #include <stdio.h>
 
+#ifndef CALCULATEVOLUMETRICCONTENT_H
+#define CALCULATEVOLUMETRICCONTENT_H
+
+
 /*
 *	Interpolation between the following points
 *			x		y
@@ -27,3 +31,5 @@
 #define INTER_X1_P3_P4 540
 
 uint8_t getWaterContent(uint8_t highByte, uint8_t lowByte);
+
+#endif
