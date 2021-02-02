@@ -30,8 +30,11 @@ void app_main(void)
     //Normal Operation:
 
     initializeVariablePool();
-    initializePLCTask();
     initWebSocketServer();
+    initializePLCTask();
+    
+    
+    
 
     //Test Code for Watering
     /*
@@ -59,17 +62,15 @@ void app_main(void)
     getPlantFromStorage(123, "", true);
 
     removePlantFromStorage(p);
-
+    */
+    /*
     while(1){
-        vTaskDelay(10/portTICK_PERIOD_MS);
+        vTaskDelay(100/portTICK_PERIOD_MS);
+        plant p = getNewPlant();
+        plantChangedNotification(p);
     }
     */
     
 
-
-
-    
-
-    
     vTaskDelete(NULL);
 }

@@ -24,7 +24,7 @@ uint8_t watering_STATE = STATE_NOWATERING;
 
 #define UART1_PORT_NUM      1
 #define UART1_BAUD_RATE     2400
-#define PLC_TASK_STACK_SIZE    4096
+#define PLC_TASK_STACK_SIZE    8192
 #define PLC_TASK_PRIORITY    9
 
 #define BUF_SIZE (1024)
@@ -130,6 +130,8 @@ static void plc_task(void *arg)
                 }else{
                     ESP_LOGI(TAG,"Successfully locked all valves, continue with opening...");
                     watering_STATE = STATE_OPENINGVALVE;
+                    while(plantBufferReference[wJob.plantToWater.address].valveStatus != LOCKED){vTaskDelay(1 / portTICK_PERIOD_MS);}
+                    chosenPlant = wJob.plantToWater;
                     resetGetNextPlantParameters();
                 }  
             }else if(plcAnswer == NOANSWER){
@@ -146,20 +148,20 @@ static void plc_task(void *arg)
 
         }else if (watering_STATE == STATE_OPENINGVALVE){
 
-            if(plantBufferReference[wJob.plantToWater.address].valveStatus == LOCKED){
+            if(plantBufferReference[chosenPlant.address].valveStatus == LOCKED){
                 command = OPENVALVE;
-                writeToPLCLine(wJob.plantToWater, command);
-            }else if(plantBufferReference[wJob.plantToWater.address].valveStatus == OPENING){
+                writeToPLCLine(chosenPlant, command);
+            }else if(plantBufferReference[chosenPlant.address].valveStatus == OPENING){
                 command = READSTATUSWITHOUTUNLOCK;
-                writeToPLCLine(wJob.plantToWater, command);
-            }else if(plantBufferReference[wJob.plantToWater.address].valveStatus == OPEN){
+                writeToPLCLine(chosenPlant, command);
+            }else if(plantBufferReference[chosenPlant.address].valveStatus == OPEN){
                 watering_STATE = STATE_WATERING;
-                wJob.plantToWater.wateringStatus = STATUS_WATERING;
-                changePlant(wJob.plantToWater, CHANGE_WATERINGSTATUS);
-                while(plantBufferReference[wJob.plantToWater.address].wateringStatus != STATUS_WATERING){vTaskDelay(1 / portTICK_PERIOD_MS);}
+                chosenPlant.wateringStatus = STATUS_WATERING;
+                changePlant(chosenPlant, CHANGE_WATERINGSTATUS);
+                while(plantBufferReference[chosenPlant.address].wateringStatus != STATUS_WATERING){vTaskDelay(1 / portTICK_PERIOD_MS);}
                 startWateringTask(wJob);
             }else{
-                ESP_LOGI(TAG,"Something went wrong, watering aborted");
+                ESP_LOGI(TAG,"Something went wrong, watering aborted. Valve state was: %u", plantBufferReference[chosenPlant.address].valveStatus);
                 resetGetNextPlantParameters();
                 watering_STATE = STATE_NOWATERING;
             }
@@ -167,8 +169,8 @@ static void plc_task(void *arg)
             
         }else if (watering_STATE == STATE_WATERING){
             //Make Watering shizzle - when done, continue with closing valve
-            if(plantBufferReference[wJob.plantToWater.address].wateringStatus == STATUS_WATERING){
-                command = READSTATUS; writeToPLCLine(wJob.plantToWater, command);
+            if(plantBufferReference[chosenPlant.address].wateringStatus == STATUS_WATERING){
+                command = READSTATUS; writeToPLCLine(chosenPlant, command);
             }else{
                 watering_STATE = STATE_CLOSINGVALVE;
             }
@@ -176,13 +178,13 @@ static void plc_task(void *arg)
 
         
         }else if (watering_STATE == STATE_CLOSINGVALVE){
-             if(plantBufferReference[wJob.plantToWater.address].valveStatus == OPEN){
+             if(plantBufferReference[chosenPlant.address].valveStatus == OPEN){
                 command = CLOSEVALVE;
-                writeToPLCLine(wJob.plantToWater, command);
-            }else if(plantBufferReference[wJob.plantToWater.address].valveStatus == CLOSING){
+                writeToPLCLine(chosenPlant, command);
+            }else if(plantBufferReference[chosenPlant.address].valveStatus == CLOSING){
                 command = READSTATUSWITHOUTUNLOCK;
-                writeToPLCLine(wJob.plantToWater, command);
-            }else if(plantBufferReference[wJob.plantToWater.address].valveStatus == CLOSED){
+                writeToPLCLine(chosenPlant, command);
+            }else if(plantBufferReference[chosenPlant.address].valveStatus == CLOSED){
                 watering_STATE = STATE_NOWATERING;
             }
         }
@@ -227,6 +229,8 @@ void writeToPLCLine(plant p, uint8_t command){
             break;
         case LOCKCOMMAND: ESP_LOGI(TAG,"Trying to lock PLCValve: %u", p.address);
             break;
+        case OPENVALVE: ESP_LOGI(TAG,"Trying to open Valve %u", p.address);
+            break;
         default: ESP_LOGI(TAG,"Writing something to PLC Valves!");
             break;
         }
@@ -258,7 +262,7 @@ char readFromPLCLine(plant p, uint8_t command){
             if(command == BROADCASTVALVEADDRESS){
                 p.address = receivedMessage[3];
             }
-            invertedAddress = ~p.address;
+            invertedAddress = 255-p.address;
 
             //If Address is correct, and checksum is correct --> Message is VALID!
             if(receivedMessage[8] == p.address && receivedMessage[9] == invertedAddress && receivedMessage[15] == getCheckSum(receivedMessage, 8)){
@@ -277,6 +281,12 @@ char readFromPLCLine(plant p, uint8_t command){
                 ESP_LOGI(TAG,"Valve State of PLC Valve %u is: %u\n", p.address, p.valveStatus);
             }else{
                 ESP_LOGI(TAG,"WRONG ANSWER!");
+                ESP_LOGI(TAG,"%u" ,receivedMessage[8]);
+                ESP_LOGI(TAG,"%u" ,receivedMessage[9]);
+                ESP_LOGI(TAG,"%u" ,receivedMessage[10]);
+                ESP_LOGI(TAG,"%u" ,receivedMessage[15]);
+                ESP_LOGI(TAG,"%u" ,getCheckSum(receivedMessage, 8));
+                
             }
         }else{
             ESP_LOGI(TAG,"ANSWER WITH INCORRECT LENGHT");
@@ -365,8 +375,9 @@ void initializePLCTask(){
     plantBufferReference = getVariablePool();
     xTaskCreate(plc_task, "plc_task", PLC_TASK_STACK_SIZE, NULL, PLC_TASK_PRIORITY, plcHandle);
     wateringQueue = xQueueCreate(15, sizeof(wateringJob));
-    vTaskDelay(10000 / portTICK_PERIOD_MS);
-    addWateringJob(plantBufferReference[0],500, 5);
+    //vTaskDelay(10000 / portTICK_PERIOD_MS);
+    //ESP_LOGI(TAG, "ADDING WATERING JOB BROOOOOOOOOOOOOOOOOOOOOOOOO");
+    //addWateringJob(plantBufferReference[0],500, 5);
 }
 
 

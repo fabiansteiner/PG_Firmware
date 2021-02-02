@@ -16,5 +16,6 @@ idf_component_register(SRCS "main.c"
                         "FAT_storage.c"
                         "countDown.c"
                         "wifi.c"
+                        "jsonParser.c"
                     INCLUDE_DIRS ".")
 

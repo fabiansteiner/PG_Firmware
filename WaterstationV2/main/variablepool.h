@@ -22,7 +22,9 @@
 #define CHANGE_SETTINGS 11
 #define CHANGE_WATERINGSTATUS 12
 #define CHANGE_SETSAFETYTIME 13
-#define UPDATE_SAFETYMINUTES 14
+#define CHANGE_ADDFROMFAT 14
+#define UPDATE_SAFETYMINUTES 15
+#define CHANGE_QUEUEFORWATERING 16
 
 #define ERRCHANGE_OVERPRESSURE 1
 #define ERRCHANGE_NOTENOUGHWATERFLOW 2
@@ -42,6 +44,8 @@
 #define CLOSINGMANUALLY 180
 #define LOCKED 200
 #define OFFLINE 220
+
+#define DELETED 230 //for the Website to know, if the plant gets deleted
 
 #define UNKNOWNSOILMOISTURE 80
 
@@ -77,6 +81,8 @@ typedef struct plantData{
     uint8_t unsuccessfulRequests;
     uint8_t safetyTimeActive;
     uint16_t safetyMinutesLeft;
+    uint8_t type;
+    uint16_t waitTime;
 }plant;
 
 
@@ -118,20 +124,18 @@ void changeErrorState(uint8_t errType, bool newState);
  */
 plant * getVariablePool();
 
+/**
+ * Get currect error States
+ * @return copy of errorStates
+ */
+errorStates getErrorStates();
+
 
 /**
  * Gets new plant with standard init values
  * @return copy of new plant object
  */
 plant getNewPlant();
-
-
-/**
- * Adds Error message
- * @param plantAddress - Address of plant
- * @param errorType - Error Type, to know how the error message will look like
- */
-void addErrorMessage(uint8_t plantAddress, uint8_t errorType);
 
 
 

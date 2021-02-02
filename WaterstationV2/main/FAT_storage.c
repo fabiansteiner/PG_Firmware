@@ -53,7 +53,7 @@ void initFATStorage(){
         ESP_LOGI(TAG, "Filename: %s, fileSize: %u, ", fileInformation.fname, fileInformation.fsize);
         plant storedPlant = getPlantFromStorage(0, fileInformation.fname ,false);
         if(storedPlant.address != NONEXISTINGADDRESS)
-            changePlant(storedPlant, CHANGE_ADD);
+            changePlant(storedPlant, CHANGE_ADDFROMFAT);
         fileInformation.fsize = 0;
         f_readdir(&dir, &fileInformation);
     }
@@ -66,7 +66,7 @@ plant getPlantFromStorage(uint8_t index, char * name, bool useIndex){
         sprintf(filename, "/spiflash/%s", name);
     }
     // Open file for reading
-    plant p = {0};
+    plant p = getNewPlant();
     p.address = NONEXISTINGADDRESS;
     ESP_LOGI(TAG, "Reading file");
     f = fopen(filename, "rb");
@@ -100,10 +100,20 @@ plant getPlantFromStorage(uint8_t index, char * name, bool useIndex){
             break;
         case 5: p.autoWatering = atoi(token);
             break;
+        case 6: p.type = atoi(token);
+            break;
+        case 7: p.waitTime = atoi(token);
+            break;
+        case 8: p.safetyTimeActive = atoi(token);
+            break;
         }
         token = strtok(NULL, ",");
         counter++;
     }
+
+    if(p.safetyTimeActive == 1) p.safetyMinutesLeft = 30;
+
+    ESP_LOGI(TAG, "SafetyTimeActive is : %u", p.safetyTimeActive);
 
     return p;
 }
@@ -121,7 +131,7 @@ void savePlantToStorage(plant plantToSave){
         return;
     }
     //Override file completely
-    fprintf(f, "%u,%s,%i,%u,%u,%u", plantToSave.address, plantToSave.name, plantToSave.waterAmount, plantToSave.fertilizerAmount, plantToSave.threshold, plantToSave.autoWatering);
+    fprintf(f, "%u,%s,%i,%u,%u,%u,%u,%u,%u", plantToSave.address, plantToSave.name, plantToSave.waterAmount, plantToSave.fertilizerAmount, plantToSave.threshold, plantToSave.autoWatering, plantToSave.type, plantToSave.waitTime, plantToSave.safetyTimeActive);
     fclose(f);
     ESP_LOGI(TAG, "File written");
 
@@ -134,7 +144,7 @@ void removePlantFromStorage(plant plantToRemove){
     if(result == FR_OK){
         ESP_LOGI(TAG, "Plant %u deleted", plantToRemove.address);
     }else{
-        ESP_LOGI(TAG, "Could not delete plant, FAT ERROR CODE: %i", plantToRemove.address);
+        ESP_LOGI(TAG, "Could not delete plant, FAT ERROR CODE: %i", result);
     }
     
 }

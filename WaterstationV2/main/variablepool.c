@@ -8,6 +8,7 @@
 #include "FAT_storage.h"
 #include "PLC.h"
 #include "countDown.h"
+#include "web_server.h"
 
 
 static const char *TAG = "VARIABLEPOOL_TASK";
@@ -109,6 +110,10 @@ plant * getVariablePool(){
     return plantList;
 }
 
+errorStates getErrorStates(){
+    return errStates;
+}
+
 
 plant getNewPlant(){
         
@@ -125,6 +130,8 @@ plant getNewPlant(){
     p.unsuccessfulRequests = 0;
     p.safetyMinutesLeft = 0;
     p.safetyTimeActive = 0;
+    p.type = 7;
+    p.waitTime = CLASSICSAFETYWAIT;
 
     return p;
 }
@@ -146,10 +153,21 @@ void changeValveStatusErrorStates(){
             }
         }
     }
+    if(errStates.oneOrMoreValveErrors != atLeastOneValveCurrSenseError || errStates.oneOrMoreValvesNotClosed != atLeastOneValveNotClosed || errStates.oneOrMoreValvesOffline != atLeastOneValveOffline){
+        //If something changed
+        errStates.oneOrMoreValveErrors = atLeastOneValveCurrSenseError;
+        errStates.oneOrMoreValvesNotClosed = atLeastOneValveNotClosed;
+        errStates.oneOrMoreValvesOffline = atLeastOneValveOffline;
+        errorStateChangedNotification(errStates);
+    }
+    
+}
 
-    errStates.oneOrMoreValveErrors = atLeastOneValveCurrSenseError;
-    errStates.oneOrMoreValvesNotClosed = atLeastOneValveNotClosed;
-    errStates.oneOrMoreValvesOffline = atLeastOneValveOffline;
+bool areErrorStatesGood(){
+    if(errStates.notEnoughWaterFlow || errStates.oneOrMoreValveErrors || errStates.oneOrMoreValvesNotClosed || errStates.oneOrMoreValvesOffline || errStates.waterPressureHigh){
+        return false;
+    }
+    return true;
 }
 
 void decreaseSafetyMinutesByOne(){
@@ -168,28 +186,50 @@ void decreaseSafetyMinutesByOne(){
 void changePlantInternally(plantChange changePlant){
     //ESP_LOGI(TAG, "Entered changePlantInternally...\n");
     int index = changePlant.plantToChange.address;
+    bool triggerUpdate = true;
     switch (changePlant.parameterType)
     {
     case CHANGE_ADD:
         ESP_LOGI(TAG, "Adding new Plant");
-        plantList[changePlant.plantToChange.address].address = changePlant.plantToChange.address;
+        char plantName[10];
+        sprintf(plantName, "plant%u", changePlant.plantToChange.address);
+        strcpy(changePlant.plantToChange.name, plantName);
+        plantList[index] = changePlant.plantToChange;
+        changeValveStatusErrorStates();
+        savePlantToStorage(plantList[index]);
+        break;
+
+    case CHANGE_ADDFROMFAT:
+        ESP_LOGI(TAG, "Getting plant from FAT Storage");
+        plantList[index].address = changePlant.plantToChange.address;
+        plantList[index].autoWatering = changePlant.plantToChange.autoWatering;
+        plantList[index].waterAmount = changePlant.plantToChange.waterAmount;
+        plantList[index].fertilizerAmount = changePlant.plantToChange.fertilizerAmount;
+        strcpy(plantList[index].name, changePlant.plantToChange.name);
+        plantList[index].threshold = changePlant.plantToChange.threshold;
+        plantList[index].type = changePlant.plantToChange.type;
+        plantList[index].waitTime = changePlant.plantToChange.waitTime;
+        plantList[index].safetyTimeActive = changePlant.plantToChange.safetyTimeActive;
+        plantList[index].safetyMinutesLeft = changePlant.plantToChange.safetyMinutesLeft;
+        changeValveStatusErrorStates();
+
         savePlantToStorage(changePlant.plantToChange);
         break;
 
     case CHANGE_REMOVE:
         ESP_LOGI(TAG, "Removing Plant");
         removePlantFromStorage(changePlant.plantToChange);
-        plantList[changePlant.plantToChange.address].address = UNREGISTEREDADDRESS;
+        plantList[index].address = UNREGISTEREDADDRESS;
         changeValveStatusErrorStates();
         break;
 
     case CHANGE_PLCVALVEVALUES:
-        if(index!=255){
+        if(index!=UNREGISTEREDADDRESS && plantList[index].address != UNREGISTEREDADDRESS){
             //ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
             plantList[index].soilMoisture = changePlant.plantToChange.soilMoisture;
             if(plantList[index].autoWatering == 1){
                 if(plantList[index].soilMoisture < plantList[index].threshold && plantList[index].safetyTimeActive == 0){
-                    if(plantList[index].wateringStatus == STATUS_NOTHINSCHEDULED){
+                    if(plantList[index].wateringStatus == STATUS_NOTHINSCHEDULED && areErrorStatesGood()){
                         plantList[index].wateringStatus = STATUS_IN_QUEUE;
                         addWateringJob(plantList[index], plantList[index].waterAmount, plantList[index].fertilizerAmount);
                     }
@@ -201,40 +241,70 @@ void changePlantInternally(plantChange changePlant){
                 changeValveStatusErrorStates();
             }
             
+        }else{triggerUpdate = false;}
+        break;
+    
+    case CHANGE_QUEUEFORWATERING:
+        if(index!=UNREGISTEREDADDRESS && plantList[index].address != UNREGISTEREDADDRESS){
+            if(plantList[index].wateringStatus == STATUS_NOTHINSCHEDULED && areErrorStatesGood()){
+                plantList[index].wateringStatus = STATUS_IN_QUEUE;
+                addWateringJob(plantList[index], changePlant.plantToChange.waterAmount, changePlant.plantToChange.fertilizerAmount);
+            }
+        }
+        break;
+
+    case CHANGE_NAME:
+        if(index!=UNREGISTEREDADDRESS){
+            strcpy(plantList[index].name, changePlant.plantToChange.name);
+            savePlantToStorage(plantList[index]);
         }
         break;
 
     case CHANGE_SETTINGS:
-        if(index!=255){
+        if(index!=UNREGISTEREDADDRESS){
             plantList[index].autoWatering = changePlant.plantToChange.autoWatering;
             plantList[index].waterAmount = changePlant.plantToChange.waterAmount;
             plantList[index].fertilizerAmount = changePlant.plantToChange.fertilizerAmount;
-            strcpy(plantList[index].name, changePlant.plantToChange.name);
             plantList[index].threshold= changePlant.plantToChange.threshold;
+            plantList[index].type = changePlant.plantToChange.type;
+            plantList[index].waitTime = changePlant.plantToChange.waitTime;
             savePlantToStorage(plantList[index]);
         }
         break;
 
     case CHANGE_WATERINGSTATUS:
-        if(index!=255){
+        if(index!=UNREGISTEREDADDRESS){
             //ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
             plantList[index].wateringStatus = changePlant.plantToChange.wateringStatus;
         }
         break;
         
         case CHANGE_SETSAFETYTIME:
-        if(index!=255){
+        if(index!=UNREGISTEREDADDRESS && plantList[index].waitTime > 0){
             //ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
             plantList[index].safetyTimeActive = 1;
-            plantList[index].safetyMinutesLeft = CLASSICSAFETYWAIT;
+            plantList[index].safetyMinutesLeft = plantList[index].waitTime;
+            savePlantToStorage(plantList[index]);
 
         }
         break;
 
-        case UPDATE_SAFETYMINUTES: decreaseSafetyMinutesByOne();
+        case UPDATE_SAFETYMINUTES: decreaseSafetyMinutesByOne(); triggerUpdate = false;
         break;
     }
-    
+
+    if(triggerUpdate && index != UNREGISTEREDADDRESS){
+        if(changePlant.parameterType != CHANGE_REMOVE){
+            plantChangedNotification(plantList[index]);
+        }else
+        {
+            changePlant.plantToChange.valveStatus = DELETED;
+            plantChangedNotification(changePlant.plantToChange);
+        }
+        
+        
+    }
+        
     //ESP_LOGI(TAG, "Changed Plant State");
     
 }
@@ -246,5 +316,6 @@ void changeErrorStateInternally(errorChange errChange){
     case ERRCHANGE_NOTENOUGHWATERFLOW: errStates.notEnoughWaterFlow = errChange.newState;
         break;
     }
+    errorStateChangedNotification(errStates);
     ESP_LOGI(TAG, "Changed Error State");
 }
