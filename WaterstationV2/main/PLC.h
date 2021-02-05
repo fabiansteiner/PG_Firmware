@@ -23,7 +23,6 @@
 #define STATE_CLOSINGVALVE 3
 #define STATE_NOWATERING 4
 
-#define PLANTREACHABLETRHESHOLD 150
 
 typedef struct wateringJob{
     plant plantToWater;

@@ -25,6 +25,7 @@ void app_main(void)
 
     //Set Log levels
     esp_log_level_set("calculateWaterContent", ESP_LOG_WARN);
+    esp_log_level_set("PLC_TASK", ESP_LOG_WARN);
     //esp_log_level_set("FAT_Storage", ESP_LOG_WARN);
 
     //Normal Operation:

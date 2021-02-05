@@ -43,6 +43,7 @@ uint8_t getCheckSum(uint8_t* message, int beginAt);
 void writeToPLCLine(plant p, uint8_t command);
 char readFromPLCLine(plant p, uint8_t command);
 uint8_t getNextFreePlantListAddress();
+void abortWatering(plant p);
 
 
 static void plc_task(void *arg)
@@ -68,7 +69,7 @@ static void plc_task(void *arg)
     ESP_ERROR_CHECK(uart_param_config(UART1_PORT_NUM, &uart1_config));
     ESP_ERROR_CHECK(uart_set_pin(UART1_PORT_NUM, PLC_TXD, PLC_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS));
 
-    const TickType_t xDelay = 1000 / portTICK_PERIOD_MS;
+    const TickType_t xDelay = 150 / portTICK_PERIOD_MS;
 
     plant chosenPlant;
     wateringJob wJob;
@@ -97,6 +98,7 @@ static void plc_task(void *arg)
                 }
             }else{          //If no: Add Error Message, that one PLC Valve is not closed and delete the watering Job
                 xQueueReceive(wateringQueue, &wJob, (TickType_t) 0);
+                abortWatering(wJob.plantToWater);
             }
         }
         
@@ -139,6 +141,8 @@ static void plc_task(void *arg)
             }else if (plcAnswer == NACK){
                 resetGetNextPlantParameters();
                 watering_STATE = STATE_NOWATERING;
+                abortWatering(chosenPlant);
+                ESP_LOGI(TAG,"A Valve could not be locked... abort watering.");
             }
 
             
@@ -151,6 +155,7 @@ static void plc_task(void *arg)
             if(plantBufferReference[chosenPlant.address].valveStatus == LOCKED){
                 command = OPENVALVE;
                 writeToPLCLine(chosenPlant, command);
+                vTaskDelay(700/ portTICK_PERIOD_MS);            //Quickfix: Extra wait is needed when opening for whatever reason... if not--> Valve puts TX down mid send and lets it there (maybe has to do something with lock (no it has not, idk then))
             }else if(plantBufferReference[chosenPlant.address].valveStatus == OPENING){
                 command = READSTATUSWITHOUTUNLOCK;
                 writeToPLCLine(chosenPlant, command);
@@ -164,6 +169,7 @@ static void plc_task(void *arg)
                 ESP_LOGI(TAG,"Something went wrong, watering aborted. Valve state was: %u", plantBufferReference[chosenPlant.address].valveStatus);
                 resetGetNextPlantParameters();
                 watering_STATE = STATE_NOWATERING;
+                abortWatering(chosenPlant);
             }
             
             
@@ -181,11 +187,17 @@ static void plc_task(void *arg)
              if(plantBufferReference[chosenPlant.address].valveStatus == OPEN){
                 command = CLOSEVALVE;
                 writeToPLCLine(chosenPlant, command);
+                vTaskDelay(700/ portTICK_PERIOD_MS);
             }else if(plantBufferReference[chosenPlant.address].valveStatus == CLOSING){
                 command = READSTATUSWITHOUTUNLOCK;
                 writeToPLCLine(chosenPlant, command);
             }else if(plantBufferReference[chosenPlant.address].valveStatus == CLOSED){
                 watering_STATE = STATE_NOWATERING;
+            }else{
+                ESP_LOGI(TAG,"Something went wrong, watering aborted. Valve state was: %u", plantBufferReference[chosenPlant.address].valveStatus);
+                resetGetNextPlantParameters();
+                watering_STATE = STATE_NOWATERING;
+                abortWatering(chosenPlant);
             }
         }
 
@@ -199,23 +211,25 @@ static void plc_task(void *arg)
             plcAnswer = readFromPLCLine(chosenPlant, command);
 
             if(plcAnswer == NOANSWER){
-                if(chosenPlant.unsuccessfulRequests < PLANTREACHABLETRHESHOLD){
-                    chosenPlant.unsuccessfulRequests++;
-                }else{
-                    chosenPlant.valveStatus = OFFLINE;
-                    if(watering_STATE != STATE_NOWATERING){
-                        watering_STATE = STATE_NOWATERING;
-                        resetGetNextPlantParameters();
-                    }
+                changePlant(chosenPlant, CHANGE_INCREASEUNSUCCESSFULREQUESTS);
+                if(watering_STATE != STATE_NOWATERING && plantBufferReference[chosenPlant.address].valveStatus == OFFLINE){
+                    watering_STATE = STATE_NOWATERING;
+                    resetGetNextPlantParameters();
+                    abortWatering(chosenPlant);
                 }
-            }else{
-                chosenPlant.unsuccessfulRequests = 0;
+                
             }
 
         }
+        vTaskDelay(10/ portTICK_PERIOD_MS);
         
         
     }
+}
+
+void abortWatering(plant p){
+    p.wateringStatus = STATUS_NOTHINSCHEDULED;
+    changePlant(p, CHANGE_WATERINGSTATUS);
 }
 
 void writeToPLCLine(plant p, uint8_t command){
@@ -293,7 +307,7 @@ char readFromPLCLine(plant p, uint8_t command){
         }
         memset(receivedMessage, 0, sizeof(receivedMessage));    //Reset buffer
     }else if(len == -1 || len == 0){
-        ESP_LOGI(TAG,"Receive Error Occured");
+        ESP_LOGI(TAG,"Receive Error Occured with len: %i", len);
     }
     if(acknoledge!=NOANSWER)
         changePlant(p, CHANGE_PLCVALVEVALUES);

@@ -58,7 +58,7 @@ esp_err_t errorStateChangedNotification(errorStates errStates){
             plant p = {0};
             uint8_t fail = buildJsonString(p, errStates, false);
             if(fail == 0){
-                //esperr = trigger_async_send_bro(getSendBuffer());
+                esperr = trigger_async_send_bro(getSendBuffer());
             }
             xSemaphoreGive(xMutexTriggerAsync);
         }
@@ -75,7 +75,7 @@ esp_err_t sendPlantsAndErrorState(){
                 return esperr;
         }
     }
-    //esperr = errorStateChangedNotification(getErrorStates());
+    esperr = errorStateChangedNotification(getErrorStates());
 
     return esperr;
 }

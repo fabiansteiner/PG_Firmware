@@ -127,7 +127,6 @@ void startWateringTask(wateringJob job123){
     setPoint = 0.66f * job123.waterAmount;
     ESP_LOGI(TAG,"Setpoint set to %u, which are %u milliliters", setPoint, job123.waterAmount);
     xTaskCreate(wateringTask, "wateringTask", WATERING_TASK_STACK_SIZE, NULL, WATERING_TASK_PRIORITY, wateringHandle);
-    ESP_LOGI(TAG,"B");
 }
 
 

@@ -144,7 +144,8 @@ void changeValveStatusErrorStates(){
 
     for(int i = 0; i<PLANTSIZE; i++){
         if(plantList[i].address != UNREGISTEREDADDRESS){
-            if(plantList[i].valveStatus != CLOSED && plantList[i].valveStatus != CURRSENSEERROR && plantList[i].valveStatus != OFFLINE){
+            //if(plantList[i].valveStatus != CLOSED && plantList[i].valveStatus != CURRSENSEERROR && plantList[i].valveStatus != OFFLINE && plantList[i].valveStatus != UNKNOWN){
+            if(plantList[i].valveStatus == MANUALOPEN || plantList[i].valveStatus == OPENINGMANUALLY || plantList[i].valveStatus == CLOSINGMANUALLY){
                 atLeastOneValveNotClosed = true;
             }else if(plantList[i].valveStatus == CURRSENSEERROR){
                 atLeastOneValveCurrSenseError = true;
@@ -223,10 +224,22 @@ void changePlantInternally(plantChange changePlant){
         changeValveStatusErrorStates();
         break;
 
+    case CHANGE_INCREASEUNSUCCESSFULREQUESTS:
+        if(plantList[index].unsuccessfulRequests < PLANTREACHABLETRHESHOLD){
+            plantList[index].unsuccessfulRequests++;
+        }else{
+            plantList[index].valveStatus = OFFLINE;
+            changeValveStatusErrorStates();
+        }
+            
+        
+        break;
+
     case CHANGE_PLCVALVEVALUES:
         if(index!=UNREGISTEREDADDRESS && plantList[index].address != UNREGISTEREDADDRESS){
             //ESP_LOGI(TAG, "Old Soil Moisture: %i, New Soil Moiture: %i", plantList[index].soilMoisture, changePlant.plantToChange.soilMoisture);
             plantList[index].soilMoisture = changePlant.plantToChange.soilMoisture;
+            plantList[index].unsuccessfulRequests = 0;
             if(plantList[index].autoWatering == 1){
                 if(plantList[index].soilMoisture < plantList[index].threshold && plantList[index].safetyTimeActive == 0){
                     if(plantList[index].wateringStatus == STATUS_NOTHINSCHEDULED && areErrorStatesGood()){
@@ -240,6 +253,7 @@ void changePlantInternally(plantChange changePlant){
                 plantList[index].valveStatus = changePlant.plantToChange.valveStatus;
                 changeValveStatusErrorStates();
             }
+            
             
         }else{triggerUpdate = false;}
         break;
