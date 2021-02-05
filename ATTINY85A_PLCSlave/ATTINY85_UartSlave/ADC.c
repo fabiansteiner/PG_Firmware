@@ -60,6 +60,8 @@ void addRingBufferValueAndCalculateAverage(uint8_t type);
 void open();
 void close();
 void resetBuffers();
+void testOpen();
+void testClose();
 
 void changeValveState(uint8_t newState){
 	if(valveState != newState){
@@ -128,15 +130,15 @@ uint8_t getValveState(){
 
 void openValve(){
 	if(valveState != OPEN && valveState != OPENING){
-		open();
 		changeValveState(OPENING);
+		open();
 	}
 	
 }
 
 void openValveManually(){
-	open();
 	changeValveState(OPENINGMANUALLY);
+	open();
 }
 
 void open(){
@@ -154,16 +156,24 @@ void open(){
 	discardcounter = 0;
 }
 
+void testOpen(){
+	//First four lines are needed if sudden switch from close to open occurs
+	_delay_ms(4000);
+	if(valveState == OPENING) changeValveState(OPEN);
+	if(valveState == OPENINGMANUALLY) changeValveState(MANUALOPEN);
+	
+}
+
 void closeValve(){
 	if(valveState != CLOSED){
-		close();
 		changeValveState(CLOSING);
+		close();
 	}
 }
 
 void closeValveManually(){
-	close();
 	changeValveState(CLOSINGMANUALLY);
+	close();
 }
 
 void close(){
@@ -181,8 +191,73 @@ void close(){
 	discardcounter = 0;
 }
 
+void testClose(){
+	//First four lines are needed if sudden switch from close to open occurs
+	_delay_ms(4000);
+	changeValveState(CLOSED);
+	
+}
+
 uint16_t getSoilMoisture(){
+	//Calculate Average Soilmoisture over the last 3 seconds
+	if(soilBuffFULL == true){
+		averageSoil = 0;
+		for(int j = 0; j < 10; j++){
+			averageSoil += soiMoistureRingBuffer[j];
+		}
+		averageSoil = averageSoil/10;
+	}
 	return averageSoil;
+}
+
+void calculateAverageCurrentSensorValues(){
+	if(currBuff1FULL == true){
+		averageCurrent1 = 0;
+		for(int j = 0; j < 20; j++){
+			averageCurrent1 += currentRingBuffer1[j];
+		}
+		averageCurrent1 = averageCurrent1/20;
+	}
+
+	if(currBuff2FULL == true){
+		averageCurrent2 = 0;
+		for(int j = 0; j < 20; j++){
+			averageCurrent2 += currentRingBuffer2[j];
+		}
+		averageCurrent2 = averageCurrent2/20;
+	}
+
+	if(currBuff2FULL == true){
+		if(averageCurrent1 >= 30 && averageCurrent2 >= 30){
+			difference = averageCurrent2-averageCurrent1;
+			if(abs(difference) > 150){ //If the measurement gap is more than 150 (=25mA), something is wrong --> Motor Off + Error State
+				PORTB &= ~(1<<DDB1);
+				PORTB &= ~(1<<DDB2);
+				changeValveState(CURRSENSEERROR);
+				adcflag = READSOILANDTEMP;
+				selectADCChannnel(SOILMOISTURESENSOR);
+				pickAnimation(LED_FASTBLINK);
+			}
+		}
+
+		if(valveState == CLOSINGMANUALLY || valveState == CLOSING){
+			compareValue = SIXTYMA;
+			}else if (valveState == OPENING || valveState == OPENINGMANUALLY){
+			compareValue = 420;
+		}
+		
+
+		if(((averageCurrent1 + averageCurrent2)/2)>= compareValue){
+			PORTB &= ~(1<<DDB1);
+			PORTB &= ~(1<<DDB2);
+			if(valveState == OPENING){changeValveState(OPEN);}else if (valveState == CLOSING || valveState == CLOSINGMANUALLY){changeValveState(CLOSED); enableButtonDetection(); }else if(valveState == OPENINGMANUALLY){changeValveState(MANUALOPEN);}
+			resetBuffers();
+			pickAnimation(LED_OFF);
+			adcflag = READSOILANDTEMP;
+			selectADCChannnel(SOILMOISTURESENSOR);
+		}
+	}
+
 }
 
 
@@ -199,12 +274,13 @@ void resetBuffers(){
 	discardcounter = 0;
 }
 
+
 ISR(ADC_vect){
 	//If Valve opens or Closes
 	if(adcflag == OPENV || adcflag == CLOSEV){
 		if(discardcounter==(DISCARDMOTOR/2)){
 			//Measurement of first sensor
-			//Happens every 33,3ms
+			//Happens every 16,6ms*40
 			//Read ADCL first, and then ADCH, to ensure values are from the same conversion
 			adcresult = ADCL;
 			adcresult |= (ADCH<<8);
@@ -223,36 +299,6 @@ ISR(ADC_vect){
 			selectADCChannnel(STROMSENSOR1);
 			addRingBufferValueAndCalculateAverage(STROMSENSOR2);
 
-			if(currBuff2FULL == true){
-				if(averageCurrent1 >= 30 && averageCurrent2 >= 30){
-				difference = averageCurrent2-averageCurrent1;
-					if(abs(difference) > 150){ //If the measurement gap is more than 150 (=25mA), something is wrong --> Motor Off + Error State
-						PORTB &= ~(1<<DDB1);
-						PORTB &= ~(1<<DDB2);
-						changeValveState(CURRSENSEERROR);
-						adcflag = READSOILANDTEMP;
-						selectADCChannnel(SOILMOISTURESENSOR);
-						pickAnimation(LED_FASTBLINK);
-					}
-				}
-
-				if(valveState == CLOSINGMANUALLY || valveState == CLOSING){
-					compareValue = SIXTYMA;
-				}else if (valveState == OPENING || valveState == OPENINGMANUALLY){
-					compareValue = 420;
-				}
-				
-
-				if(((averageCurrent1 + averageCurrent2)/2)>= compareValue){
-					PORTB &= ~(1<<DDB1);
-					PORTB &= ~(1<<DDB2);
-					if(valveState == OPENING){changeValveState(OPEN);}else if (valveState == CLOSING || valveState == CLOSINGMANUALLY){changeValveState(CLOSED); enableButtonDetection(); }else if(valveState == OPENINGMANUALLY){changeValveState(MANUALOPEN);}
-					resetBuffers();
-					pickAnimation(LED_OFF);
-					adcflag = READSOILANDTEMP;
-					selectADCChannnel(SOILMOISTURESENSOR);
-				}
-			}
 		}
 	}
 	if(adcflag == READSOILANDTEMP){
@@ -281,13 +327,7 @@ void addRingBufferValueAndCalculateAverage(uint8_t type){
 				currBuffcount1 = 0;
 				currBuff1FULL = true;
 			}
-			if(currBuff1FULL == true){
-				averageCurrent1 = 0;
-				for(int j = 0; j < 20; j++){
-					averageCurrent1 += currentRingBuffer1[j];
-				}
-				averageCurrent1 = averageCurrent1/20;
-			}
+			
 			break;
 		case STROMSENSOR2:
 			currentRingBuffer2[currBuffcount2]=adcresult;
@@ -296,13 +336,7 @@ void addRingBufferValueAndCalculateAverage(uint8_t type){
 				currBuffcount2 = 0;
 				currBuff2FULL = true;
 			}
-			if(currBuff2FULL == true){
-				averageCurrent2 = 0;
-				for(int j = 0; j < 20; j++){
-					averageCurrent2 += currentRingBuffer2[j];
-				}
-				averageCurrent2 = averageCurrent2/20;
-			}
+			
 
 			break;
 		case SOILMOISTURESENSOR:
@@ -311,13 +345,6 @@ void addRingBufferValueAndCalculateAverage(uint8_t type){
 			if(soilBuffCount >=10){
 				soilBuffCount = 0;
 				soilBuffFULL = true;
-			}
-			if(soilBuffFULL == true){
-				averageSoil = 0;
-				for(int j = 0; j < 10; j++){
-					averageSoil += soiMoistureRingBuffer[j];
-				}
-				averageSoil = averageSoil/10;
 			}
 			break;
 	}

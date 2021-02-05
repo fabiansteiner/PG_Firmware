@@ -41,6 +41,7 @@ uint8_t starbedingungCounter = 0;
 uint8_t startBitValid = false;
 bool bufferedCommand = false;
 static volatile uint8_t tempTxChar;
+char sendBuffer[8] = {0};
 static volatile char* currentAddress;
 
 void initializeTimer(){
@@ -120,12 +121,21 @@ bool usiuart_printStr(char* string){
 	
 	if(state == SEND) return false;		//Currently sending
 
+	sendBuffer[0] = string[0];
+	sendBuffer[1] = string[1];
+	sendBuffer[2] = string[2];
+	sendBuffer[3] = string[3];
+	sendBuffer[4] = string[4];
+	sendBuffer[5] = string[5];
+	sendBuffer[6] = string[6];
+	sendBuffer[7] = string[7];
+
 	//Disable Analog Comperator Interrupt (== Sending is priority, receiving gets interrupted if something is currently received)
 	ACSR &= ~(1<<ACIE);
 	resetRXBufferAndIdle();
 
 	bitCounter = -1;
-	currentAddress = string;
+	currentAddress = sendBuffer;
 	TCNT0 = 0;
 	OCR0A = TIMER_TICK-1;
 	state = SEND;

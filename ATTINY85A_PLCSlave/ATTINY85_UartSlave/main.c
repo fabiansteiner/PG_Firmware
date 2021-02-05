@@ -86,8 +86,11 @@ int main(void)
 			actOutButtonPress(buttonPress);
 		}
 		
+
 		_delay_ms(10);	//Essential for timing the Led animations correct
+		calculateAverageCurrentSensorValues();
 		animateLed();
+		
 
 		if(resetflag == true){
 			resetTimeout++;

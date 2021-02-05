@@ -36,8 +36,8 @@ void enableButtonDetection(){
 }
 
 void disableButtonDetection(){
-	//GIMSK  &= ~(1<<PCIF0);				//Enables PinChange interrupt for PCINT0-PCINT7
-	PCMSK0 &= ~(1<<PCINT6);
+	GIMSK  &= ~(1<<PCIF0);				//Enables PinChange interrupt for PCINT0-PCINT7
+	//PCMSK0 &= ~(1<<PCINT6);
 }
 
 void resetButtonCounters(){

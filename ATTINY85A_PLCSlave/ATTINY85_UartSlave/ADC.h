@@ -18,12 +18,12 @@
 
 #define OPEN 20
 #define CLOSED 40
-#define OPENING 60
+#define OPENING 160
 #define CLOSING 80
 #define UNKNOWN 100
 #define CURRSENSEERROR 120
 #define MANUALOPEN 140
-#define OPENINGMANUALLY 160
+#define OPENINGMANUALLY 60
 #define CLOSINGMANUALLY 180
 #define LOCKED 200
 
@@ -75,6 +75,8 @@ uint16_t getSoilMoisture();
  * If a power down occurs while the valve is moving, or a CURRSENSERROR occurs, the motor will go to a defined state on power up again
  */
 void goToDefinedPosition();
+
+void calculateAverageCurrentSensorValues();
 
 
 
