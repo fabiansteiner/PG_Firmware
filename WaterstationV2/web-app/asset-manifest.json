@@ -1,0 +1,18 @@
+{
+  "main.css": "/static/css/main.8cb93959.chunk.css",
+  "main.js": "/static/js/main.18620380.chunk.js",
+  "runtime~main.js": "/static/js/runtime~main.a8a9905a.js",
+  "static/js/2.46109804.chunk.js": "/static/js/2.46109804.chunk.js",
+  "index.html": "/index.html",
+  "precache-manifest.1f452bf699fd240c17bf75adcf71a4e3.js": "/precache-manifest.1f452bf699fd240c17bf75adcf71a4e3.js",
+  "service-worker.js": "/service-worker.js",
+  "static/media/main.css": "/static/media/plant.161d37fe.jpeg",
+  "static/media/chilli.svg": "/static/media/chilli.f42a77b1.svg",
+  "static/media/cucumber.svg": "/static/media/cucumber.95472579.svg",
+  "static/media/drops.svg": "/static/media/drops.6904d03d.svg",
+  "static/media/marihuana.svg": "/static/media/marihuana.2a8bfa95.svg",
+  "static/media/microgreens.svg": "/static/media/microgreens.f30230c4.svg",
+  "static/media/paprica.svg": "/static/media/paprica.8b85d458.svg",
+  "static/media/plant.svg": "/static/media/plant.b8f4a981.svg",
+  "static/media/tomato.svg": "/static/media/tomato.123e5a5d.svg"
+}
