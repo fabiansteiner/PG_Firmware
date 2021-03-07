@@ -69,7 +69,7 @@ static void plc_task(void *arg)
     ESP_ERROR_CHECK(uart_param_config(UART1_PORT_NUM, &uart1_config));
     ESP_ERROR_CHECK(uart_set_pin(UART1_PORT_NUM, PLC_TXD, PLC_RXD, ECHO_TEST_RTS, ECHO_TEST_CTS));
 
-    const TickType_t xDelay = 150 / portTICK_PERIOD_MS;
+    const TickType_t xDelay = 200 / portTICK_PERIOD_MS;
 
     plant chosenPlant;
     wateringJob wJob;

@@ -18,6 +18,7 @@
 #include "watering.h"
 #include "FAT_storage.h"
 #include "web_server.h"
+#include "UserIO.h"
 
 void app_main(void)
 {
@@ -33,6 +34,7 @@ void app_main(void)
     initializeVariablePool();
     initWebSocketServer();
     initializePLCTask();
+    initializeUserIO();
     
     
     

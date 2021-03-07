@@ -39,11 +39,13 @@ void variablePoolTask(void * pvParameters){
     while(1){
         if(xQueueReceive(plantChangeQueue, &pc, (TickType_t) 20) == pdTRUE){
             changePlantInternally(pc);
-        }else if(xQueueReceive(errStateChangeQueue, &ec, (TickType_t) 20) == pdTRUE){
-            changeErrorStateInternally(ec);
-        }else{
-            vTaskDelay(5/ portTICK_PERIOD_MS);
         }
+        if(xQueueReceive(errStateChangeQueue, &ec, (TickType_t) 20) == pdTRUE){
+            changeErrorStateInternally(ec);
+        }
+
+        vTaskDelay(5/ portTICK_PERIOD_MS);
+        
     }
 }
 
@@ -103,6 +105,7 @@ void changePlant(plant plantToChange, uint8_t parameterType){
 void changeErrorState(uint8_t errType, bool newState){
    errorChange ec = {errType, newState};
    xQueueSend(errStateChangeQueue, &ec, (TickType_t) 0);
+   ESP_LOGI(TAG, "Sent Error Change request to queue Request to Queue\n");
 }
 
 
@@ -225,12 +228,14 @@ void changePlantInternally(plantChange changePlant){
         break;
 
     case CHANGE_INCREASEUNSUCCESSFULREQUESTS:
-        if(plantList[index].unsuccessfulRequests < PLANTREACHABLETRHESHOLD){
-            plantList[index].unsuccessfulRequests++;
-        }else{
-            plantList[index].valveStatus = OFFLINE;
-            changeValveStatusErrorStates();
-        }
+        if(index!=UNREGISTEREDADDRESS && plantList[index].address != UNREGISTEREDADDRESS){
+            if(plantList[index].unsuccessfulRequests < PLANTREACHABLETRHESHOLD){
+                plantList[index].unsuccessfulRequests++;
+            }else{
+                plantList[index].valveStatus = OFFLINE;
+                changeValveStatusErrorStates();
+            }
+        }else{triggerUpdate = false;}
             
         
         break;
@@ -325,10 +330,12 @@ void changePlantInternally(plantChange changePlant){
 
 void changeErrorStateInternally(errorChange errChange){
     switch (errChange.errType){
-    case ERRCHANGE_OVERPRESSURE: errStates.waterPressureHigh = errChange.newState;
-        break;
-    case ERRCHANGE_NOTENOUGHWATERFLOW: errStates.notEnoughWaterFlow = errChange.newState;
-        break;
+        case ERRCHANGE_OVERPRESSURE: errStates.waterPressureHigh = errChange.newState;
+            break;
+        case ERRCHANGE_NOTENOUGHWATERFLOW: errStates.notEnoughWaterFlow = errChange.newState;
+            break;
+        case ERRCHANGE_PROBLEMRESOLVEDMANUALLY: errStates.notEnoughWaterFlow = false; errStates.waterPressureHigh = false;
+            break;
     }
     errorStateChangedNotification(errStates);
     ESP_LOGI(TAG, "Changed Error State");
