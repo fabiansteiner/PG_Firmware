@@ -30,11 +30,12 @@ void app_main(void)
     //esp_log_level_set("FAT_Storage", ESP_LOG_WARN);
 
     //Normal Operation:
-
+    
     initializeVariablePool();
     initWebSocketServer();
     initializePLCTask();
     initializeUserIO();
+    
     
     
     
