@@ -10,13 +10,11 @@
  #include <stdbool.h>
 
  #include "buttonLed.h"
+ #include "ADC.h"
 
  uint8_t buttonPressCounter = 0;
  uint8_t timeOutCounter = 0;
  uint16_t buttonDownTime = 0;
-
- uint8_t pickedButtonPress = 0;
- uint8_t returnButtonPress = 0;
 
 
  bool debounceState = false;
@@ -52,8 +50,10 @@ void resetButtonCounters(){
  * @return 0, if nothing was pressed, and the codes for the Button presses (BUTTON_......) if something has been pressed
  */
 uint8_t detectButtonAction(){
+
+	uint8_t pickedButtonPress = 0;
 	
-	//Disable debouncing after 20ms
+	//Disable debouncing after 10-20ms
 	if(debounceState == true){
 		debounceCounter++;
 		if (debounceCounter >= 2){
@@ -71,17 +71,18 @@ uint8_t detectButtonAction(){
 		}else{
 			timeOutCounter++;
 			if(timeOutCounter >= 100){
-				pickedButtonPress = BUTTON_NORMALPRESS;
+				if(buttonPressCounter >= 5){
+					pickedButtonPress = BUTTON_5XPRESS;
+				}else{
+					pickedButtonPress = BUTTON_NORMALPRESS;
+				}
 				resetButtonCounters();
 			}
 		}
 		
 	}
 
-	uint8_t returnButtonPress = pickedButtonPress;
-	pickedButtonPress = 0;
-
-	return returnButtonPress;
+	return pickedButtonPress;
 }
 
 /**
@@ -161,6 +162,12 @@ void startDebouncing(){
 ISR(PCINT0_vect){
 	if(!debounceState){
 		if((PINA & (1<<PINA6))==0){		//Button has been pressed
+			//STOP Valve at calibration immediately when button was pressed
+			if(getValveState() == CALIBRATING){
+				stopButtonPressed();
+				startDebouncing();
+				return;
+			}
 			PORTB |= (1<<PORTB0);
 			buttonPressCounter++;
 			timeOutCounter = 0;
