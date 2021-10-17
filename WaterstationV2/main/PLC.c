@@ -76,6 +76,10 @@ static void plc_task(void *arg)
     uint8_t command = READSTATUS;
     char plcAnswer = NOANSWER;
 
+    //Variables for evaluating
+    uint32_t sentRequests = 0;
+    uint32_t unansweredRequests = 0;
+
     while (1) {
 
         awaitAnswer = false;
@@ -204,6 +208,9 @@ static void plc_task(void *arg)
         plcAnswer = NOANSWER;
         
         if(awaitAnswer == true){
+            //if(command != BROADCASTVALVEADDRESS)
+            //    sentRequests++;
+
             //Wait for PLC Uart to transmit data + Wait for answer from slaves
             vTaskDelay( xDelay );
             
@@ -217,8 +224,16 @@ static void plc_task(void *arg)
                     resetGetNextPlantParameters();
                     abortWatering(chosenPlant);
                 }
+
+                //if(command != BROADCASTVALVEADDRESS){
+                    //increase not received counter.
+                    //unansweredRequests++;
+                //}
                 
             }
+
+            //if(command != BROADCASTVALVEADDRESS)
+            //    ESP_LOGW(TAG,"Sent requests, received response: %u/%u", sentRequests, sentRequests - unansweredRequests);
 
         }
         vTaskDelay(10/ portTICK_PERIOD_MS);

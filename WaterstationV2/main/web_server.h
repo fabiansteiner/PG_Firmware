@@ -2,6 +2,6 @@
 
 void initWebSocketServer();
 
-void plantChangedNotification(plant p);
+void plantChangedNotification(plant p, bool initialSend);
 
 void errorStateChangedNotification(errorStates errStates);

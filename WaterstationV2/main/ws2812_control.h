@@ -4,9 +4,13 @@
 #include "sdkconfig.h"
 #define NUM_LEDS 12
 
-#define RED   0xFF0000
-#define GREEN 0x00FF00
+#define OFF 0x000000
+#define RED   0x007700
+#define GREEN 0xFF0000
 #define BLUE  0x0000FF
+#define YELLOW  0x555500
+#define ORANGE 0x408800
+#define VERYDIMMGREEN 0x170000
 
 // This structure is used for indicating what the colors of each LED should be set to.
 // There is a 32bit value for each LED. Only the lower 3 bytes are used and they hold the

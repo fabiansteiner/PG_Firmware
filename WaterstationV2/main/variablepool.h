@@ -127,6 +127,13 @@ void changeErrorState(uint8_t errType, bool newState);
  */
 plant * getVariablePool();
 
+
+/**
+ * Get currect error States
+ * @return Point to errorStates
+ */
+errorStates * getErrorStatesPointer();
+
 /**
  * Get currect error States
  * @return copy of errorStates

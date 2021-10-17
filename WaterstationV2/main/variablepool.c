@@ -117,6 +117,10 @@ errorStates getErrorStates(){
     return errStates;
 }
 
+errorStates * getErrorStatesPointer(){
+    return &errStates;
+}
+
 
 plant getNewPlant(){
         
@@ -215,9 +219,12 @@ void changePlantInternally(plantChange changePlant){
         plantList[index].waitTime = changePlant.plantToChange.waitTime;
         plantList[index].safetyTimeActive = changePlant.plantToChange.safetyTimeActive;
         plantList[index].safetyMinutesLeft = changePlant.plantToChange.safetyMinutesLeft;
+        plantList[index].valveStatus = OFFLINE;
+        //If i directly set it up to Offline, everything crashes
+        
         changeValveStatusErrorStates();
 
-        savePlantToStorage(changePlant.plantToChange);
+        //savePlantToStorage(changePlant.plantToChange);
         break;
 
     case CHANGE_REMOVE:
@@ -314,11 +321,11 @@ void changePlantInternally(plantChange changePlant){
 
     if(triggerUpdate && index != UNREGISTEREDADDRESS){
         if(changePlant.parameterType != CHANGE_REMOVE){
-            plantChangedNotification(plantList[index]);
+            plantChangedNotification(plantList[index], false);
         }else
         {
             changePlant.plantToChange.valveStatus = DELETED;
-            plantChangedNotification(changePlant.plantToChange);
+            plantChangedNotification(changePlant.plantToChange, false);
         }
         
         

@@ -1,5 +1,14 @@
-#define LED_NORMAL 1
+
+#ifndef USERIO_H
+#define USERIO_H
+
+#define SUBJECT_WATERING 10
+#define SUBJECT_CONNECTED 20
 
 void initializeUserIO();
 
-void changeLedAnimation(uint8_t animation);
+void changeUserIOState(uint8_t subject, bool state);
+
+void switchButtonDetection(bool on);
+
+#endif

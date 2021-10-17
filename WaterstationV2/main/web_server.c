@@ -1,3 +1,6 @@
+//Possibly further improvement: track sessions with FD, so multiple clients can connect.
+//Only possible if disconnect is tracked: idea here: https://www.esp32.com/viewtopic.php?t=16501&start=20
+
 #include <esp_wifi.h>
 #include <esp_event.h>
 #include <esp_log.h>
@@ -13,6 +16,8 @@
 #include "wifi.h"
 #include "variablepool.h"
 #include "jsonParser.h"
+#include "UserIO.h"
+
 
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
 #define SCRATCH_BUFSIZE 8192
@@ -22,16 +27,24 @@
 
 char chunk[SCRATCH_BUFSIZE] = {0};
 
+const uint8_t SENDERRORSTATES = 255;
 
-static const char *TAG = "WebSocket Server";
-SemaphoreHandle_t xMutexTriggerAsync = NULL;
+
+static const char *TAG = "WebSocketServer";
 static httpd_handle_t server = NULL;
 plant * plantBufferReference;
 
 struct async_resp_arg asyncResponseConnection;
 bool connectedWithSomething = false;
 
-static esp_err_t trigger_async_send_bro(char *message);
+TaskHandle_t webSocketTaskHandle = NULL;
+QueueHandle_t wsSendQueue;
+//Because if you send more asyncSends to the webserver at once, they will be ignored and not added to the http queue.
+SemaphoreHandle_t xSemaphoreNotMoreThan6 = NULL;
+
+uint8_t currentIndexPointer = 0;
+
+static esp_err_t trigger_async_send_bro(uint8_t index);
 
 /*
  * Structure holding server handle
@@ -41,52 +54,71 @@ static esp_err_t trigger_async_send_bro(char *message);
 struct async_resp_arg {
     httpd_handle_t hd;
     int fd;
-    char jsonToSend[512];
+    uint8_t sendIndex;
 };
+
+void wsSendTask(void * pvParameters){
+    //InitializingShizzle
+
+    uint16_t countingSemaphorFullTimer = 0;
+
+    uint8_t index = 0;
+
+    while(1){
+        if(uxSemaphoreGetCount(xSemaphoreNotMoreThan6)>0){
+            if(xQueueReceive(wsSendQueue, &index, (TickType_t) 20) == pdTRUE){
+            
+                xSemaphoreTake(xSemaphoreNotMoreThan6, portMAX_DELAY);
+                if (trigger_async_send_bro(index) != ESP_OK){
+                    xSemaphoreGive(xSemaphoreNotMoreThan6);
+                    ESP_LOGW(TAG, "Failed to queue to the http queue.");
+                }
+                
+            }
+            countingSemaphorFullTimer = 0;
+        }else{
+            countingSemaphorFullTimer++;
+            if(countingSemaphorFullTimer > 500){//If it is full for 5 full seconds
+                xSemaphoreGive(xSemaphoreNotMoreThan6);
+                ESP_LOGW(TAG, "Safety Release of Counting semaphor was necessary!!");
+            } 
+        }
+        
+        
+        
+
+        vTaskDelay(10/ portTICK_PERIOD_MS);
+    }
+}
     
 
-esp_err_t plantChangedNotification(plant p){
-    esp_err_t esperr = ESP_OK;
-    if(connectedWithSomething){
-        if(xSemaphoreTake( xMutexTriggerAsync, portMAX_DELAY) == pdTRUE){
-            errorStates er = {0};
-            uint8_t fail = buildJsonString(p, er, true);
-            if(fail == 0){
-                esperr = trigger_async_send_bro(getSendBuffer());
-            }
-            xSemaphoreGive(xMutexTriggerAsync);
-        }
+void plantChangedNotification(plant p, bool initialSend){
+
+    if(connectedWithSomething || initialSend){
+        plant * plantPointer = &(plantBufferReference[p.address]);
+        
+        xQueueSend(wsSendQueue, &(plantPointer->address), (TickType_t) 10);
     }
-    return esperr;
 }
 
-esp_err_t errorStateChangedNotification(errorStates errStates){
-    esp_err_t esperr = ESP_OK;
-    if(connectedWithSomething){
-        if(xSemaphoreTake( xMutexTriggerAsync, portMAX_DELAY) == pdTRUE){
-            plant p = {0};
-            uint8_t fail = buildJsonString(p, errStates, false);
-            if(fail == 0){
-                esperr = trigger_async_send_bro(getSendBuffer());
-            }
-            xSemaphoreGive(xMutexTriggerAsync);
-        }
+void errorStateChangedNotification(errorStates errStates, bool initialSend){
+    if(connectedWithSomething || initialSend){
+        xQueueSend(wsSendQueue, &SENDERRORSTATES, (TickType_t) 10);
     }
-    return esperr;
 }
 
-esp_err_t sendPlantsAndErrorState(){
-    esp_err_t esperr = ESP_OK;
+void sendPlantsAndErrorState(){
+
+    errorStateChangedNotification(getErrorStates(), true);
+
     for(int i = 0; i<PLANTSIZE; i++){
         if(plantBufferReference[i].address != UNREGISTEREDADDRESS){
-            esperr = plantChangedNotification(plantBufferReference[i]);
-            if(esperr != ESP_OK)
-                return esperr;
+            plantChangedNotification(plantBufferReference[i], true);
         }
     }
-    esperr = errorStateChangedNotification(getErrorStates());
 
-    return esperr;
+    connectedWithSomething = true;
+    
 }
 
 
@@ -98,23 +130,45 @@ static void ws_async_send(void *arg)
     struct async_resp_arg *resp_arg = arg;
     httpd_handle_t hd = resp_arg->hd;
     int fd = resp_arg->fd;
-    httpd_ws_frame_t ws_pkt;
-    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.payload = (uint8_t*)resp_arg->jsonToSend;
-    ws_pkt.len = strlen(resp_arg->jsonToSend);
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    //ESP_LOGI(TAG, "Sending json data....");
-    httpd_ws_send_frame_async(hd, fd, &ws_pkt);
+    uint8_t sendIndex = resp_arg->sendIndex;
+
+
+
+    uint8_t fail;
+    if(sendIndex != SENDERRORSTATES){
+        fail = buildJsonString(sendIndex, true);
+    }else{
+        fail = buildJsonString(0, false);
+    }
+
+    
+    if(fail == 0){
+        httpd_ws_frame_t ws_pkt;
+        memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+
+        ws_pkt.payload = (uint8_t*)getSendBuffer();
+        ws_pkt.len = strlen(getSendBuffer());
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        ESP_LOGI(TAG, "Execute Sending json data....");
+        httpd_ws_send_frame_async(hd, fd, &ws_pkt);
+    }
+
+    
     free(resp_arg);
+    xSemaphoreGive(xSemaphoreNotMoreThan6);
 }
 
-static esp_err_t trigger_async_send_bro(char *message)
+static esp_err_t trigger_async_send_bro(uint8_t index)
 {
     struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
     resp_arg->hd = asyncResponseConnection.hd;
     resp_arg->fd = asyncResponseConnection.fd;
-    strcpy(resp_arg->jsonToSend, message);
-    //ESP_LOGI(TAG, "FD: %i", resp_arg->fd);
+    resp_arg->sendIndex = index;
+    ESP_LOGI(TAG, "Queue HTTP Work with FD: %i and index: %i", resp_arg->fd, resp_arg->sendIndex);
+    ESP_LOGI(TAG, "Current State of Counting Semaphor: %i", uxSemaphoreGetCount(xSemaphoreNotMoreThan6));
+    ESP_LOGI(TAG, "Free Heap: %u", xPortGetFreeHeapSize());
+    
+    
     return httpd_queue_work(asyncResponseConnection.hd, ws_async_send, resp_arg);
 }
 
@@ -123,7 +177,7 @@ static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
     struct async_resp_arg *resp_arg = malloc(sizeof(struct async_resp_arg));
     resp_arg->hd = req->handle;
     resp_arg->fd = httpd_req_to_sockfd(req);
-    strcpy(resp_arg->jsonToSend, "Ok :)");
+    //strcpy(resp_arg->jsonToSend, "Ok :)");
     //ESP_LOGI(TAG, "FD: %i", resp_arg->fd);
     return httpd_queue_work(handle, ws_async_send, resp_arg);
 }
@@ -134,6 +188,13 @@ static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
  */
 static esp_err_t echo_handler(httpd_req_t *req)
 {
+    ESP_LOGW(TAG, "New echo_handler request with method: %i, Session Socket FD: %i", req->method, httpd_req_to_sockfd(req));
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        //connectedWithSomething = false;
+        return ESP_OK;
+    }
+
     uint8_t buf[512] = { 0 };
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -150,13 +211,15 @@ static esp_err_t echo_handler(httpd_req_t *req)
         if(asyncResponseConnection.fd!=httpd_req_to_sockfd(req)){
             asyncResponseConnection.fd=httpd_req_to_sockfd(req);
             asyncResponseConnection.hd=req->handle;
-            connectedWithSomething = true;
             ESP_LOGI(TAG, "Target Socket set");
-            return sendPlantsAndErrorState();
+            sendPlantsAndErrorState();
+            return ESP_OK;
         }else{
             uint8_t res = parseIncomingString((char *)ws_pkt.payload);
-            if(res == 2)
-                return sendPlantsAndErrorState();
+            if(res == 2){
+                sendPlantsAndErrorState();
+                return ESP_OK;
+            }
         }
 
     }
@@ -179,6 +242,8 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
     const char *type = "text/plain";
     if (CHECK_FILE_EXTENSION(filepath, ".html")) {
         type = "text/html";
+        connectedWithSomething = false;
+        xQueueReset(wsSendQueue);
     } else if (CHECK_FILE_EXTENSION(filepath, ".js")) {
         type = "application/javascript";
     } else if (CHECK_FILE_EXTENSION(filepath, ".css")) {
@@ -289,6 +354,7 @@ static void disconnect_handler(void* arg, esp_event_base_t event_base,
         stop_webserver(*server);
         *server = NULL;
     }
+    changeUserIOState(SUBJECT_CONNECTED, false);
 }
 
 static void connect_handler(void* arg, esp_event_base_t event_base,
@@ -299,6 +365,7 @@ static void connect_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Starting webserver");
         *server = start_webserver();
     }
+    changeUserIOState(SUBJECT_CONNECTED, true);
 }
 
 esp_err_t init_fs(void)
@@ -332,9 +399,17 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
+
+
 void initWebSocketServer(){
-    xMutexTriggerAsync = xSemaphoreCreateMutex();
+    initJsonParser();
+
     plantBufferReference = getVariablePool();
+
+
+    wsSendQueue = xQueueCreate(30, sizeof(uint8_t));
+    xTaskCreate(wsSendTask, "ws_Send_Task", 4096, NULL, 5, webSocketTaskHandle);
+    xSemaphoreNotMoreThan6 = xSemaphoreCreateCounting(5,5);
     
 
     //Done by wifi.c

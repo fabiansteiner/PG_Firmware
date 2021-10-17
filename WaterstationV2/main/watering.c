@@ -12,12 +12,13 @@
 
 #include <stdio.h>
 #include "watering.h"
+#include "UserIO.h"
 
 
 #define RELAY 25
 #define PUMP 18
 #define FERTPUMP 14
-#define ENABLE 2
+#define ENABLE 23           //DO NOT USE GPIO2 --> Pulling GPIO Pin 2 high prevents you from flashing
 #define EXTRAVALVE 19
 #define STEP 14
 #define DIR 12
@@ -32,6 +33,7 @@ TaskHandle_t wateringHandle = NULL;
 
 wateringJob wJob;
 
+void switchRelay(bool open);
 static void turn_on_pump(float duty_cycle);
 static void turn_off_pump();
 static void turn_on_fertPump(float duty_cycle);
@@ -71,8 +73,8 @@ void wateringTask(void * pvParameters){
     uint16_t newStepperFrequency = 0;
 
     //Set Relay to on 
-    gpio_set_level(RELAY, 1);
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    //gpio_set_level(RELAY, 1);
+    switchRelay(true);
     gpio_isr_handler_add(FLOWSENSOR, gpio_isr_handler, (void*) 0);
     //Activate PWM on Pump
     turn_on_pump(75.0);
@@ -104,7 +106,7 @@ void wateringTask(void * pvParameters){
 
         wateringTimeCounter++;
         if(wateringTimeCounter > 10){//if the first 5 Seconds passed
-            if(flowSpeed < 0.5f){
+            if(flowSpeed < 0.05f){
                 waterFlowTooSlow = true;
                 break;
             }
@@ -137,8 +139,11 @@ void wateringTask(void * pvParameters){
     turn_off_pump();
     turn_off_fertPump();
     gpio_set_level(ENABLE, 1);
-    gpio_set_level(RELAY, 0);
+    //gpio_set_level(RELAY, 0);
+    switchRelay(false);
     gpio_isr_handler_remove(FLOWSENSOR);
+
+    changeUserIOState(SUBJECT_WATERING, false);
 
     if(overPressure == true){
         ESP_LOGI(TAG,"Watering aborted, Pressure too High");
@@ -173,6 +178,7 @@ void startWateringTask(wateringJob job123){
     //1ml = 0.66 Ticks
     setPoint = 0.66f * job123.waterAmount;
     ESP_LOGI(TAG,"Setpoint set to %u, which are %u milliliters", setPoint, job123.waterAmount);
+    changeUserIOState(SUBJECT_WATERING, true);
     xTaskCreate(wateringTask, "wateringTask", WATERING_TASK_STACK_SIZE, NULL, WATERING_TASK_PRIORITY, wateringHandle);
 }
 
@@ -193,7 +199,7 @@ void initializeWateringComponents(bool test){
     //Init Motor Control PWM on Pump pin
     mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, PUMP);
     mcpwm_config_t pwm_config;
-    pwm_config.frequency = 33;    //frequency = 22Hz (2l/min),
+    pwm_config.frequency = 33;    //frequency = 33Hz (3l/min),
     pwm_config.cmpr_a = 0;    //duty cycle of PWMxA = 0
     pwm_config.cmpr_b = 0;    //duty cycle of PWMxb = 0
     pwm_config.counter_mode = MCPWM_UP_COUNTER;
@@ -226,6 +232,17 @@ void initializeWateringComponents(bool test){
     adc1_config_channel_atten(ADC1_CHANNEL_6,ADC_ATTEN_DB_11);
 
 
+}
+
+void switchRelay(bool open){
+    switchButtonDetection(false);
+    if(open){
+        gpio_set_level(RELAY, 1);
+    }else{
+        gpio_set_level(RELAY, 0);
+    }
+    vTaskDelay(20 / portTICK_PERIOD_MS);
+    switchButtonDetection(true);
 }
 
 /**

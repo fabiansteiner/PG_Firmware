@@ -27,14 +27,15 @@ void app_main(void)
     //Set Log levels
     esp_log_level_set("calculateWaterContent", ESP_LOG_WARN);
     esp_log_level_set("PLC_TASK", ESP_LOG_WARN);
+    //esp_log_level_set("WebSocketServer", ESP_LOG_WARN);
     //esp_log_level_set("FAT_Storage", ESP_LOG_WARN);
 
     //Normal Operation:
-    
-    initializeVariablePool();
     initWebSocketServer();
+    initializeVariablePool();
     initializePLCTask();
-    initializeUserIO();
+    initializeUserIO(); //Has to be for whatever reason on the last position, if not --> neopixels does not work
+    
     
     
     

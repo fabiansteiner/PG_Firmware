@@ -15,9 +15,11 @@ static const char *TAG = "JSONparser";
 
 char sendBuffer[512];
 
+plant * plantBufferReference;
 
 
-uint8_t buildJsonString(plant p, errorStates err, bool isPlant){
+
+uint8_t buildJsonString(uint16_t p_index, bool isPlant){
     memset(sendBuffer, 0, 512);
     if(isPlant){
 
@@ -28,27 +30,27 @@ uint8_t buildJsonString(plant p, errorStates err, bool isPlant){
 
         cJSON *plantJson,*progressJson;
 	    plantJson=cJSON_CreateObject();
-        cJSON_AddNumberToObject(plantJson,"address",		p.address);
-	    cJSON_AddItemToObject(plantJson, "name", cJSON_CreateString(p.name));
-        cJSON_AddNumberToObject(plantJson,"waterAmount",		p.waterAmount);
-        cJSON_AddNumberToObject(plantJson,"fertilizerAmount",		p.fertilizerAmount);
-        cJSON_AddNumberToObject(plantJson,"soilMoisture",		p.soilMoisture);
-        cJSON_AddNumberToObject(plantJson,"threshold",		p.threshold);
-        cJSON_AddNumberToObject(plantJson,"wateringStatus",		p.wateringStatus);
-        cJSON_AddNumberToObject(plantJson,"valveStatus",		p.valveStatus);
-        cJSON_AddNumberToObject(plantJson,"autoWatering",		p.autoWatering);
+        cJSON_AddNumberToObject(plantJson,"address",		plantBufferReference[p_index].address);
+	    cJSON_AddItemToObject(plantJson, "name", cJSON_CreateString(plantBufferReference[p_index].name));
+        cJSON_AddNumberToObject(plantJson,"waterAmount",		plantBufferReference[p_index].waterAmount);
+        cJSON_AddNumberToObject(plantJson,"fertilizerAmount",		plantBufferReference[p_index].fertilizerAmount);
+        cJSON_AddNumberToObject(plantJson,"soilMoisture",		plantBufferReference[p_index].soilMoisture);
+        cJSON_AddNumberToObject(plantJson,"threshold",		plantBufferReference[p_index].threshold);
+        cJSON_AddNumberToObject(plantJson,"wateringStatus",		plantBufferReference[p_index].wateringStatus);
+        cJSON_AddNumberToObject(plantJson,"valveStatus",		plantBufferReference[p_index].valveStatus);
+        cJSON_AddNumberToObject(plantJson,"autoWatering",		plantBufferReference[p_index].autoWatering);
         
 	    cJSON_AddItemToObject(plantJson, "progress", progressJson=cJSON_CreateObject());
-        cJSON_AddNumberToObject(progressJson,"water",		            p.progress.water);
-        cJSON_AddNumberToObject(progressJson,"waterProgress",		    p.progress.waterProgress);
-        cJSON_AddNumberToObject(progressJson,"fertilizerPerLiter",		p.progress.fertilizerPerLiter);
-        cJSON_AddNumberToObject(progressJson,"fertilizerProgress",		p.progress.fertilizerProgress);
+        cJSON_AddNumberToObject(progressJson,"water",		            plantBufferReference[p_index].progress.water);
+        cJSON_AddNumberToObject(progressJson,"waterProgress",		    plantBufferReference[p_index].progress.waterProgress);
+        cJSON_AddNumberToObject(progressJson,"fertilizerPerLiter",		plantBufferReference[p_index].progress.fertilizerPerLiter);
+        cJSON_AddNumberToObject(progressJson,"fertilizerProgress",		plantBufferReference[p_index].progress.fertilizerProgress);
         
-        cJSON_AddNumberToObject(plantJson,"unsuccessfulRequests",		p.unsuccessfulRequests);
-        cJSON_AddNumberToObject(plantJson,"safetyTimeActive",		p.safetyTimeActive);
-        cJSON_AddNumberToObject(plantJson,"safetyMinutesLeft",		p.safetyMinutesLeft);
-        cJSON_AddNumberToObject(plantJson,"type",		p.type);
-        cJSON_AddNumberToObject(plantJson,"waitTime",		p.waitTime);
+        cJSON_AddNumberToObject(plantJson,"unsuccessfulRequests",		plantBufferReference[p_index].unsuccessfulRequests);
+        cJSON_AddNumberToObject(plantJson,"safetyTimeActive",		plantBufferReference[p_index].safetyTimeActive);
+        cJSON_AddNumberToObject(plantJson,"safetyMinutesLeft",		plantBufferReference[p_index].safetyMinutesLeft);
+        cJSON_AddNumberToObject(plantJson,"type",		plantBufferReference[p_index].type);
+        cJSON_AddNumberToObject(plantJson,"waitTime",		plantBufferReference[p_index].waitTime);
 
         //formatted print */
 
@@ -101,6 +103,8 @@ uint8_t buildJsonString(plant p, errorStates err, bool isPlant){
 
         cJSON *errState;
 	    errState=cJSON_CreateObject();
+        errorStates err= getErrorStates();
+
         if(err.waterPressureHigh){
             cJSON_AddTrueToObject(errState, "waterPressureHigh");
         }else{
@@ -321,4 +325,8 @@ uint8_t parseIncomingString(char *incomingString){
 
 char * getSendBuffer(){
     return sendBuffer;
+}
+
+void initJsonParser(){
+    plantBufferReference = getVariablePool();
 }
