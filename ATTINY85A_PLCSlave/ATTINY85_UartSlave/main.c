@@ -36,6 +36,8 @@ uint8_t myAddress =  254;	//Initialise with non existing address
 bool registered = false;
 bool readyToReceiveAddress = false;
 
+//uint16_t buttonPressCount = 0;
+
 bool checkRequest();
 void processRequest();
 void sendAnswer();
@@ -46,16 +48,19 @@ int main(void)
 {
 	sei();
 	uart_init();
-	adc_init();
+	//clearEEPROM();
 	eeprom_init();
-	enableButtonDetection();
-
+	adc_init();
+	
 	//LED
 	DDRB |= (1<<DDB0);
 	//Button Pull-up
 	PORTA |= (1<<PORTA6);
 
+	enableButtonDetection();
+
 	//read Address
+
 	//reset();
 	//myAddress = 0b01010110;
 	//myAddress = 255;
@@ -65,7 +70,7 @@ int main(void)
 	}
 
 	pickAnimation(LED_STARTUP);
-	goToDefinedPosition();	//Bring valve to a defined position (OPEN or CLOSED)
+	goToDefinedPosition();	//Drive valve to a defined position, when power was off during movement (ManualOPEN or CLOSED)
 
 
     while (1) 
@@ -82,6 +87,12 @@ int main(void)
 			memset(receivedMessage, 0, sizeof(receivedMessage));		//Reset char array.
 		}
 		uint8_t buttonPress = detectButtonAction();
+
+		//buttonPressCount++;
+		//if(buttonPressCount == 6000){
+		//	buttonPress = BUTTON_NORMALPRESS;
+		//	buttonPressCount=0;
+		//}
 		if(buttonPress){
 			actOutButtonPress(buttonPress);
 		}
@@ -90,6 +101,8 @@ int main(void)
 		_delay_ms(10);	//Essential for timing the Led animations correct
 		calculateAverageCurrentSensorValues();
 		animateLed();
+
+		
 		
 
 		if(resetflag == true){
@@ -209,7 +222,7 @@ void actOutButtonPress(uint8_t buttonAction){
 		}
 		
 	}
-	if(buttonAction == BUTTON_5SEC_PRESS && getValveState() != OPENINGMANUALLY && getValveState() != CLOSINGMANUALLY){
+	if(buttonAction == BUTTON_5SEC_PRESS && (getValveState() == CLOSED || getValveState() == MANUALOPEN)){
 		if(registered){
 			pickAnimation(LED_REGISTEREDORRESET);
 			resetflag = true;
@@ -217,9 +230,9 @@ void actOutButtonPress(uint8_t buttonAction){
 			readyToReceiveAddress = true;
 			pickAnimation(LED_FASTBLINK);
 		}
-		
-		
-		
+	}
+	if(buttonAction == BUTTON_5XPRESS && getValveState() == MANUALOPEN){
+		calibrationClosing();
 	}
 }
 

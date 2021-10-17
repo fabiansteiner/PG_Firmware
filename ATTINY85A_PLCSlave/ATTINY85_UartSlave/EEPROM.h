@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #define MAGICBYTEADDRESS 100
+#define MAGICBYTEADDRESSADCVALUE 101
 #define MAGICBYTENUMBER 170 //0b10101010
 #define UNREGISTEREDSLAVEADDRESS 255
 
@@ -55,6 +56,18 @@ void writeMotorStatus(uint8_t state);
  * @return Motor State
  */
 uint8_t readMotorStatus();
+
+/**
+ * write ADC Strength of closing and Opening Mechanism
+ * @param strength - strength as ADC Value
+ */
+void writeMotorStrength(uint16_t strength);
+
+/**
+ * read Motor Strength
+ * @return Motor Strength
+ */
+uint16_t readMotorStrength();
 
 
 

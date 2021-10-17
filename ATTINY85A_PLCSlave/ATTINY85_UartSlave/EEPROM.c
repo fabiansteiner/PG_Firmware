@@ -13,6 +13,8 @@
 
 #define ADDRESSPOINTER 0
 #define VALVESTATEPOINTER 1
+#define STRENGTH1 2
+#define STRENGTH2 3
 #define NONEXISTINGADDRESS 254
 
 
@@ -29,6 +31,11 @@ void eeprom_init(){
 		writeAddress(UNREGISTEREDSLAVEADDRESS);
 		EEPROMwriteByte(MAGICBYTEADDRESS, MAGICBYTENUMBER);
 		writeMotorStatus(MANUALOPEN);
+	}
+	magicByte = EEPROMreadByte(MAGICBYTEADDRESSADCVALUE);
+	if(magicByte != MAGICBYTENUMBER){
+		writeMotorStrength(500);
+		EEPROMwriteByte(MAGICBYTEADDRESSADCVALUE, MAGICBYTENUMBER);
 	}
 }
 
@@ -60,6 +67,19 @@ void writeMotorStatus(uint8_t state){
 
 uint8_t readMotorStatus(){
 	return EEPROMreadByte(VALVESTATEPOINTER);
+}
+
+void writeMotorStrength(uint16_t strength){
+	EEPROMwriteByte(STRENGTH1, (uint8_t)(strength & 0xff));
+	EEPROMwriteByte(STRENGTH2, (uint8_t)(strength >> 8));
+}
+
+uint16_t readMotorStrength(){
+
+	uint16_t strength = EEPROMreadByte(STRENGTH1);
+	strength += EEPROMreadByte(STRENGTH2) << 8;
+
+	return strength;
 }
 
 void EEPROMwriteByte(uint8_t address, uint8_t data){

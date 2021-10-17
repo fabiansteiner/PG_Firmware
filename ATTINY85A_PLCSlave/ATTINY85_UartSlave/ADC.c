@@ -26,10 +26,14 @@
 #define STROMSENSOR2 7
 #define SOILMOISTURESENSOR 3
 
-#define DISCARDMOTOR 80				//60 Measurments per Second
-#define DISCRADSOILSENSOR 14423		//Measurement every 3 seconds 
+#define DISCARDMOTOR 20				//80 = 60 Measurments per Second, 20 = 240 Measurements per second
+#define DISCRADSOILSENSOR 14423		//Measurement every 3 seconds
+#define CURRBUFFSIZE 40
 
-#define SIXTYMA 480		//ADC value at 65mA flowing current, // Miliamp Calculation = ((125/1023)*analogValue);
+//#define SIXTYMA 480		//ADC value at 65mA flowing current, // Miliamp Calculation = ((125/1023)*analogValue);
+
+uint16_t motorTreshold = 500;
+bool stopButton = false;
 
 uint8_t valveState = CLOSED;
 uint8_t adcflag = READSOILANDTEMP;
@@ -37,18 +41,22 @@ uint8_t adcflag = READSOILANDTEMP;
 uint16_t discardcounter = 0;
 uint16_t adcresult = 0;
 
-uint16_t currentRingBuffer1[20] = {0};
+volatile uint16_t currentRingBuffer1[CURRBUFFSIZE] = {0};
 uint8_t currBuffcount1 = 0;
 bool currBuff1FULL =false;
+uint16_t averageCurrent1FirstHalf = 0;
+uint16_t averageCurrent1SecondHalf = 0;
 uint16_t averageCurrent1 = 0;
 
-uint16_t currentRingBuffer2[20] = {0};
+volatile uint16_t currentRingBuffer2[CURRBUFFSIZE] = {0};
 uint8_t currBuffcount2 = 0;
 bool currBuff2FULL =false;
+uint16_t averageCurrent2FirstHalf = 0;
+uint16_t averageCurrent2SecondHalf = 0;
 uint16_t averageCurrent2 = 0;
 
 int16_t difference;
-uint16_t compareValue = SIXTYMA;
+uint16_t compareValue = 0;
 
 uint16_t soiMoistureRingBuffer[10] = {0};
 uint8_t soilBuffCount = 0;
@@ -66,7 +74,7 @@ void testClose();
 void changeValveState(uint8_t newState){
 	if(valveState != newState){
 		bool worthWriting = true;
-		if(newState == LOCKED || (newState == CLOSED && valveState == LOCKED) || newState == CURRSENSEERROR){
+		if(newState == LOCKED || (newState == CLOSED && valveState == LOCKED) || newState == CURRSENSEERROR || newState == CALIBRATING){
 			worthWriting = false;
 		}
 		valveState = newState;
@@ -81,6 +89,7 @@ void adc_init(void){
 	DDRB |= (1<<DDB1) | (1<<DDB2);
 	
 	valveState = readMotorStatus();
+	motorTreshold = readMotorStrength();
 	
 	ADCSRA|= (1<<ADPS0) | (1<<ADPS1) | (1<<ADPS2);			//Prescaler 128 = 62500 HZ = 62,5kHz ADC Clock, 1 Takt = 16uS, 1xADC Convertion in free running mode = 13 Cylces = 208uS x 2 for both current Sensors = 416uS for 1 Current Measurement cycle
 	selectADCChannnel(SOILMOISTURESENSOR);						//standard ADC channel = 0 = STROMSENSOR1	
@@ -93,11 +102,14 @@ void adc_init(void){
 }
 
 void goToDefinedPosition(){
+	//openValveManually();
+	
 	if(valveState == OPENING || valveState == CLOSING || valveState == CLOSINGMANUALLY || valveState == OPEN){
 		closeValve();
 	}else if(valveState == OPENINGMANUALLY){
 		openValveManually();
 	}
+	
 }
 
 void selectADCChannnel(uint8_t channel){
@@ -126,6 +138,10 @@ void lockValve(bool lock){
 
 uint8_t getValveState(){
 	return valveState;
+}
+
+void stopButtonPressed(){
+	stopButton = true;
 }
 
 void openValve(){
@@ -168,12 +184,20 @@ void closeValve(){
 	if(valveState != CLOSED){
 		changeValveState(CLOSING);
 		close();
+		pickAnimation(LED_MOVEVALVE);
 	}
 }
 
 void closeValveManually(){
 	changeValveState(CLOSINGMANUALLY);
 	close();
+	pickAnimation(LED_MOVEVALVE);
+}
+
+void calibrationClosing(){
+	changeValveState(CALIBRATING);
+	close();
+	pickAnimation(LED_FASTBLINK);
 }
 
 void close(){
@@ -183,9 +207,9 @@ void close(){
 	PORTB &= ~(1<<PORTB1);
 	PORTB &= ~(1<<PORTB2);
 
-	pickAnimation(LED_MOVEVALVE);
+	
 	PORTB |= (1<<PORTB2);
-	_delay_ms(110);
+	//_delay_ms(110);
 	adcflag = CLOSEV;
 	selectADCChannnel(STROMSENSOR1);
 	discardcounter = 0;
@@ -210,51 +234,139 @@ uint16_t getSoilMoisture(){
 	return averageSoil;
 }
 
+void calcAverages(uint8_t sensorOne){
+	
+	uint16_t *averageCurrentFirstHalf;
+	uint16_t *averageCurrentSecondHalf;
+	uint16_t *averageCurrent;
+	volatile uint16_t *currBuff;
+	uint8_t index;
+	
+	if(sensorOne){
+		averageCurrentFirstHalf = &averageCurrent1FirstHalf;
+		averageCurrentSecondHalf = &averageCurrent1SecondHalf;
+		averageCurrent = &averageCurrent1;
+		currBuff = currentRingBuffer1;
+		index = currBuffcount1;
+	}else{
+		averageCurrentFirstHalf = &averageCurrent2FirstHalf;
+		averageCurrentSecondHalf = &averageCurrent2SecondHalf;
+		averageCurrent = &averageCurrent2;
+		currBuff = currentRingBuffer2;
+		index = currBuffcount2;
+	}
+
+	*averageCurrentFirstHalf = 0;
+	*averageCurrentSecondHalf = 0;
+	*averageCurrent = 0;
+	
+	cli();
+
+
+	for(int j = 0; j < (CURRBUFFSIZE/2); j++){
+		if(index >= CURRBUFFSIZE){
+			index = 0;
+		}
+		*averageCurrentFirstHalf += currBuff[index];
+		index++;
+	}
+
+	for(int j = 0; j < (CURRBUFFSIZE/2); j++){
+		if(index >= CURRBUFFSIZE){
+			index = 0;
+		}
+		*averageCurrentSecondHalf += currBuff[index];
+		index++;
+	}
+
+	
+	sei();
+	*averageCurrentFirstHalf /= (CURRBUFFSIZE/2);
+	*averageCurrentSecondHalf /= (CURRBUFFSIZE/2);
+	*averageCurrent = (*averageCurrentFirstHalf + *averageCurrentSecondHalf)/2; 
+}
+
 void calculateAverageCurrentSensorValues(){
+	uint16_t averageCurrentFirstHalf = 0;
+	uint16_t averageCurrentSecondHalf = 0;
+	bool rampUP = false;
+
 	if(currBuff1FULL == true){
-		averageCurrent1 = 0;
-		for(int j = 0; j < 20; j++){
-			averageCurrent1 += currentRingBuffer1[j];
-		}
-		averageCurrent1 = averageCurrent1/20;
+		calcAverages(1);
 	}
 
 	if(currBuff2FULL == true){
-		averageCurrent2 = 0;
-		for(int j = 0; j < 20; j++){
-			averageCurrent2 += currentRingBuffer2[j];
+		calcAverages(0);
+
+		averageCurrentFirstHalf = (averageCurrent1FirstHalf + averageCurrent2FirstHalf)/2;
+		averageCurrentSecondHalf = (averageCurrent1SecondHalf + averageCurrent2SecondHalf)/2;
+
+		if(averageCurrentSecondHalf > averageCurrentFirstHalf+40){
+			rampUP = true;
+		}else{
+			rampUP = false;
 		}
-		averageCurrent2 = averageCurrent2/20;
+			
 	}
 
 	if(currBuff2FULL == true){
-		if(averageCurrent1 >= 30 && averageCurrent2 >= 30){
-			difference = averageCurrent2-averageCurrent1;
-			if(abs(difference) > 150){ //If the measurement gap is more than 150 (=25mA), something is wrong --> Motor Off + Error State
-				PORTB &= ~(1<<DDB1);
-				PORTB &= ~(1<<DDB2);
-				changeValveState(CURRSENSEERROR);
-				adcflag = READSOILANDTEMP;
-				selectADCChannnel(SOILMOISTURESENSOR);
-				pickAnimation(LED_FASTBLINK);
-			}
+		difference = averageCurrent2-averageCurrent1;
+		if(abs(difference) > 250){ //If the measurement gap is more than 250 (= ~30mA), something is wrong --> Motor Off + Error State
+			PORTB &= ~(1<<DDB1);
+			PORTB &= ~(1<<DDB2);
+			changeValveState(CURRSENSEERROR);
+			adcflag = READSOILANDTEMP;
+			selectADCChannnel(SOILMOISTURESENSOR);
+			pickAnimation(LED_FASTBLINK);
 		}
 
 		if(valveState == CLOSINGMANUALLY || valveState == CLOSING){
-			compareValue = SIXTYMA;
-			}else if (valveState == OPENING || valveState == OPENINGMANUALLY){
-			compareValue = 420;
+			compareValue = motorTreshold;
+		}else if (valveState == OPENING || valveState == OPENINGMANUALLY){
+			compareValue = motorTreshold / 2;
+			if(compareValue < 400) compareValue = 400;
+		}else if (valveState == CALIBRATING){
+			compareValue = 1015;
 		}
+
+		uint16_t endAverage = (averageCurrent1 + averageCurrent2)/2;
 		
 
-		if(((averageCurrent1 + averageCurrent2)/2)>= compareValue){
+		if(((rampUP && endAverage >= compareValue)) || averageCurrent1 > 1020 || averageCurrent2 > 1020){
 			PORTB &= ~(1<<DDB1);
 			PORTB &= ~(1<<DDB2);
-			if(valveState == OPENING){changeValveState(OPEN);}else if (valveState == CLOSING || valveState == CLOSINGMANUALLY){changeValveState(CLOSED); enableButtonDetection(); }else if(valveState == OPENINGMANUALLY){changeValveState(MANUALOPEN);}
+			if(valveState == OPENING){changeValveState(OPEN);}
+			else if (valveState == CLOSING || valveState == CLOSINGMANUALLY){changeValveState(CLOSED); enableButtonDetection(); }
+			else if(valveState == OPENINGMANUALLY){changeValveState(MANUALOPEN);}
+			else if(valveState == CALIBRATING) {changeValveState(CLOSED); writeMotorStrength(1015); motorTreshold = 1015;}
 			resetBuffers();
 			pickAnimation(LED_OFF);
 			adcflag = READSOILANDTEMP;
 			selectADCChannnel(SOILMOISTURESENSOR);
+			return;
+		}
+
+		if(stopButton){
+			stopButton = false;
+			PORTB &= ~(1<<DDB1);
+			PORTB &= ~(1<<DDB2);
+			changeValveState(CLOSED); 
+			if(endAverage > 500){
+				motorTreshold = ((averageCurrent1 + averageCurrent2)/2)+50;
+				if(motorTreshold > 1015){
+					motorTreshold = 1015;
+				}
+			}else{
+				motorTreshold = 500;
+			}
+			
+			writeMotorStrength(motorTreshold);
+
+			resetBuffers();
+			pickAnimation(LED_OFF);
+			adcflag = READSOILANDTEMP;
+			selectADCChannnel(SOILMOISTURESENSOR);
+
 		}
 	}
 
@@ -323,7 +435,7 @@ void addRingBufferValueAndCalculateAverage(uint8_t type){
 		case STROMSENSOR1:
 			currentRingBuffer1[currBuffcount1]=adcresult;
 			currBuffcount1++;
-			if(currBuffcount1 >=20){
+			if(currBuffcount1 >=CURRBUFFSIZE){
 				currBuffcount1 = 0;
 				currBuff1FULL = true;
 			}
@@ -332,7 +444,7 @@ void addRingBufferValueAndCalculateAverage(uint8_t type){
 		case STROMSENSOR2:
 			currentRingBuffer2[currBuffcount2]=adcresult;
 			currBuffcount2++;
-			if(currBuffcount2 >=20){
+			if(currBuffcount2 >=CURRBUFFSIZE){
 				currBuffcount2 = 0;
 				currBuff2FULL = true;
 			}

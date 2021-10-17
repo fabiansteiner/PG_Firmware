@@ -26,6 +26,7 @@
 #define OPENINGMANUALLY 60
 #define CLOSINGMANUALLY 180
 #define LOCKED 200
+#define CALIBRATING 220
 
 
 /**
@@ -77,6 +78,15 @@ uint16_t getSoilMoisture();
 void goToDefinedPosition();
 
 void calculateAverageCurrentSensorValues();
+
+
+
+/**
+ * Starts calibration closing - Waits for user to press button to know where to stop
+ */
+void calibrationClosing();
+
+void stopButtonPressed();
 
 
 
