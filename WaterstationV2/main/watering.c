@@ -73,14 +73,14 @@ void wateringTask(void * pvParameters){
     uint16_t newStepperFrequency = 0;
 
     //Set Relay to on 
-    //gpio_set_level(RELAY, 1);
     switchRelay(true);
     gpio_isr_handler_add(FLOWSENSOR, gpio_isr_handler, (void*) 0);
     //Activate PWM on Pump
-    turn_on_pump(75.0);
-    gpio_set_level(ENABLE, 0);
-    
-    
+    turn_on_pump(100.0);
+
+    if(wJob.fertilizerAmount > 0){
+        gpio_set_level(ENABLE, 0);
+    }
 
     while(flowSensorTick < setPoint){
         vTaskDelay(500/portTICK_PERIOD_MS);
@@ -105,7 +105,7 @@ void wateringTask(void * pvParameters){
         }
 
         wateringTimeCounter++;
-        if(wateringTimeCounter > 10){//if the first 5 Seconds passed
+        if(wateringTimeCounter > 20){//if the first 10 Seconds passed
             if(flowSpeed < 0.05f){
                 waterFlowTooSlow = true;
                 break;
@@ -199,7 +199,7 @@ void initializeWateringComponents(bool test){
     //Init Motor Control PWM on Pump pin
     mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, PUMP);
     mcpwm_config_t pwm_config;
-    pwm_config.frequency = 33;    //frequency = 33Hz (3l/min),
+    pwm_config.frequency = 25000;    //frequency = 33Hz (3l/min),
     pwm_config.cmpr_a = 0;    //duty cycle of PWMxA = 0
     pwm_config.cmpr_b = 0;    //duty cycle of PWMxb = 0
     pwm_config.counter_mode = MCPWM_UP_COUNTER;

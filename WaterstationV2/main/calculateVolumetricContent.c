@@ -8,24 +8,47 @@ static const char* TAG = "calculateWaterContent";
 int linearInterpolation (int turnedAdcValue, float k, float d, int x1);
 
 uint8_t getWaterContent(uint8_t highByte, uint8_t lowByte){
-    int adc_value = 1023-(lowByte + (highByte << 8));
-    ESP_LOGI(TAG, "HighByte: %u , LowByte: %u\n\r", highByte, lowByte);
-    ESP_LOGI(TAG, "Turned ADC value: %i\n", adc_value);
+    int adc_value;
 
-    if(adc_value == 1023){
+    if(SOILMOSTUREKIND == SOILMOISTURESENSORV2){
+        adc_value = 1023-(lowByte + (highByte << 8));
+        ESP_LOGI(TAG, "HighByte: %u , LowByte: %u\n\r", highByte, lowByte);
+        ESP_LOGI(TAG, "Turned ADC value: %i\n", adc_value);
+
+        if(adc_value == 1023){
+            return UNKNOWNSOILMOISTURE;
+        }else if(adc_value < ADC_P1){
+            return 0;
+        }else if (adc_value >= ADC_P1 && adc_value < ADC_P2){
+            return linearInterpolation(adc_value, INTER_K_P1_P2, INTER_D_P1_P2, INTER_X1_P1_P2);
+        }else if (adc_value >= ADC_P2 && adc_value < ADC_P3){
+            return linearInterpolation(adc_value, INTER_K_P2_P3, INTER_D_P2_P3, INTER_X1_P2_P3);
+        }else if (adc_value >= ADC_P3 && adc_value <= ADC_P4){
+            return linearInterpolation(adc_value, INTER_K_P3_P4, INTER_D_P3_P4, INTER_X1_P3_P4);
+        }else if (adc_value > ADC_P4){
+            return 50;
+        }
+    }else if(SOILMOSTUREKIND == TRUEBNERSMT50){
+        adc_value = lowByte + (highByte << 8);
+        ESP_LOGI(TAG, "HighByte: %u , LowByte: %u\n\r", highByte, lowByte);
+        ESP_LOGI(TAG, "ADC value: %i\n", adc_value);
+
+        if(adc_value >=1 && adc_value <=650){
+            float result = (float)adc_value/614*50;
+            uint8_t rounded = roundf(result);
+            return rounded;
+        }else{
+            return UNKNOWNSOILMOISTURE;
+        }
+
+    }else{
+        ESP_LOGE(TAG, "Unknown Soil Moisture Sensor");
         return UNKNOWNSOILMOISTURE;
-    }else if(adc_value < ADC_P1){
-        return 0;
-    }else if (adc_value >= ADC_P1 && adc_value < ADC_P2){
-        return linearInterpolation(adc_value, INTER_K_P1_P2, INTER_D_P1_P2, INTER_X1_P1_P2);
-    }else if (adc_value >= ADC_P2 && adc_value < ADC_P3){
-        return linearInterpolation(adc_value, INTER_K_P2_P3, INTER_D_P2_P3, INTER_X1_P2_P3);
-    }else if (adc_value >= ADC_P3 && adc_value <= ADC_P4){
-        return linearInterpolation(adc_value, INTER_K_P3_P4, INTER_D_P3_P4, INTER_X1_P3_P4);
-    }else if (adc_value > ADC_P4){
-        return 50;
     }
+
     return UNKNOWNSOILMOISTURE;
+    
+    
 }
 
 

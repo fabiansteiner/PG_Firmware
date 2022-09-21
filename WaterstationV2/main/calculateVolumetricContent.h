@@ -30,6 +30,11 @@
 #define INTER_X1_P2_P3 417
 #define INTER_X1_P3_P4 540
 
+#define SOILMOISTURESENSORV2 1
+#define TRUEBNERSMT50 2
+
+#define SOILMOSTUREKIND TRUEBNERSMT50
+
 uint8_t getWaterContent(uint8_t highByte, uint8_t lowByte);
 
 #endif
